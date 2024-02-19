@@ -20,6 +20,8 @@ points = numpy.fromfile(bin_file, dtype=np.float32).reshape(-1, 5)
 
 + `point[:3]` are x, y, z coordinate of the point
 + `point[3]` is the intensity value of the point. Intensity is the reflected level of the point. The higher value is the more reflected it is (brighter it is). The value of intensity varies from 0 to 255 (0, 1, .., 255). This value is important to distinguish between lane point and non-lane point.
+    * the intensity relfects the color freuqnecy embedded in the reflective scatter
+    * source: https://www.jianshu.com/p/1ac4286cfabd
 + `point[4]` is lidar beam value. The lidar which produces this data is a spinning lidar and has 64 vertical beams. Lidar beam value can have the value from 0 to 63 (The lidar in the image have 32 beams instead)
 
 ![Lidar beams](images/lidar_beams.png)
