@@ -69,19 +69,19 @@ if __name__ == "__main__":
         eps = best_params['eps']  # Use tuned eps value
         min_samples = best_params['min_samples']  # Use tuned min_samples value
         
-        # ground_pcd, non_ground_pcd, ground_attributes, non_ground_attributes= lane_detection_system.segment_ground_plane(pcd, attributes, distance_threshold=(eps*0.005), ransac_n=5, num_iterations=1000)
+        ground_pcd, non_ground_pcd, ground_attributes, non_ground_attributes= lane_detection_system.segment_ground_plane(pcd, attributes, distance_threshold=(eps*0.005), ransac_n=5, num_iterations=1000)
         
         # visualize the segmentation result
         # data_visualizer.visualize_lane_detection(pcd, non_ground_pcd)
         
-        # pcd = non_ground_pcd
-        # attributes = non_ground_attributes
+        pcd = non_ground_pcd
+        attributes = non_ground_attributes
         
         # Perform DBSCAN and update attributes
         best_labels = lane_detection_system.cluster_with_dbscan(pcd, eps, min_samples)
         updated_attributes = np.hstack((attributes, best_labels.reshape(-1, 1)))  # Append labels as a new column
         # Learn intensity threshold from clusters    
-        intensity_threshold = lane_detection_system.learn_intensity_threshold(updated_attributes, percentage=0.5)
+        intensity_threshold = lane_detection_system.learn_intensity_threshold(updated_attributes, percentage=0.9)
         
         # Filter clusters based on intensity and geometric shape
         selected_indices = lane_detection_system.intensity_filter(updated_attributes, intensity_threshold)
@@ -110,10 +110,10 @@ if __name__ == "__main__":
         # normalize the point cloud
         # filtered_pcd = data_preprocess_system.scaler_transform(filtered_pcd)
         # cluster the point cloud into lanes
-        num_slopes = lane_detection_system.optimize_k_means(filtered_pcd, max_n_clusters = num_lanes + 1)
-        # print(f"Number of lanes: {num_slopes}") 
+        num_slopes = lane_detection_system.optimize_k_means(filtered_pcd, min_n_cluster = (poly_degree), max_n_clusters = num_lanes * (poly_degree), visualize=False)
+        print(f"Number of lanes: {num_slopes}") 
         # cluster the point cloud into lanes using k-means
-        kmeans = KMeans(n_clusters=num_slopes, random_state=10, n_init=10, max_iter=300)
+        kmeans = KMeans(n_clusters=num_slopes, random_state=10, n_init='auto', max_iter=300)
         cluster_labels = kmeans.fit_predict(np.asarray(filtered_pcd.points)[:, :2])
         
         # update the attributes signigying slope labels
@@ -121,14 +121,16 @@ if __name__ == "__main__":
         
         # calculate the slope of each slope cluster
         slopes = lane_detection_system.calculate_slope(filtered_pcd, filtered_attributes, num_slopes)
-        # print(f"Slopes: {slopes}")
         
         # delete the point cloud and attributes with the slope orthogonal to the x-axis 
         filtered_pcd, filtered_attributes = lane_detection_system.delete_orthogonal_slope(filtered_pcd, filtered_attributes, slopes)
         
+        # visualize the lane detection result
+        # data_visualizer.visualize_lane_detection(pcd, filtered_pcd) 
+        
         # grid_dict = lane_marker.create_grid_dict(min_x, max_x)
-        grid_dict = lane_marker.create_grid_dict(filtered_pcd, filtered_attributes, max_lane_width = 3.9)
-        # conver pointcloud to np.array
+        grid_dict = lane_marker.create_grid_dict(filtered_pcd, filtered_attributes, num_lanes = num_lanes, max_lane_width = 3.9)
+        # # conver pointcloud to np.array
         filtered_pcd_array = np.asarray(filtered_pcd.points)
         min_x = np.floor(np.min(filtered_pcd_array[:, 0])).astype(int)
         max_x = np.ceil(np.max(filtered_pcd_array[:, 0])).astype(int) 
@@ -142,8 +144,7 @@ if __name__ == "__main__":
 
         iteration = 0
         max_iter = 200
-        prev_error = 1000
-        # prev_error = float('inf')
+        prev_error = float('inf')
         best_coeffs_pair_left = None
         best_coeffs_pair_right = None
         
@@ -170,18 +171,6 @@ if __name__ == "__main__":
                 y_left = data_repres_left[:, 1]
                 X_right = data_repres_right[:, 0].reshape(-1, 1)
                 y_right = data_repres_right[:, 1]
-                # # Create scalers for X and y (if y scaling is desired)
-                # scaler_X_left = StandardScaler().fit(X_left)
-                # scaler_X_right = StandardScaler().fit(X_right)
-                # # mu_X for X before scaling
-                # mu_X_left = scaler_X_left.mean_
-                # mu_X_right = scaler_X_right.mean_
-                # # sigma_X for standard deviation of X before scaling
-                # sigma_X_left = scaler_X_left.scale_
-                # sigma_X_right = scaler_X_right.scale_
-                # # Scale the data
-                # X_left_scaled = scaler_X_left.transform(X_left)
-                # X_right_scaled = scaler_X_right.transform(X_right)
                 
                 # Polynomial Fitting with RANSAC
                 model_left = RANSACRegressor(poly_regression,
@@ -199,8 +188,7 @@ if __name__ == "__main__":
                 model_right.fit(X_right, y_right)
                 # model_right.fit(X_right_scaled, y_right)
                 right_lane_coeffs = model_right.estimator_.get_params(deep = True)["coeffs"] # corresponds to coefficients for order from highest to lowest
-                # Model Evaluation (this is a placeholder for whatever metric you use)
-                # Model Evaluation (this is a placeholder for whatever metric you use)
+
                 left_error = np.mean((model_left.predict(X_left) - y_left) ** 2)
                 right_error = np.mean((model_right.predict(X_right) - y_right) ** 2)
                 current_error = left_error + right_error
@@ -214,17 +202,6 @@ if __name__ == "__main__":
                 
             iteration += 1
         
-        # # convert the coefficients back to the original scale
-        # alpha_left_3 = best_coeffs_pair_left[3] / sigma_X_left**3
-        # alpha_left_2 = best_coeffs_pair_left[2] / sigma_X_left**2
-        # alpha_left_1 = best_coeffs_pair_left[1] / sigma_X_left
-        # alpha_left_0 = best_coeffs_pair_left[0] - (alpha_left_1 * mu_X_left) + (alpha_left_2 * mu_X_left**2) - (alpha_left_3 * mu_X_left**3)
-        # best_coeffs_pair_left = np.array([alpha_left_3, alpha_left_2, alpha_left_1, alpha_left_0])
-        # alpha_right_3 = best_coeffs_pair_right[3] / sigma_X_right**3
-        # alpha_right_2 = best_coeffs_pair_right[2] / sigma_X_right**2
-        # alpha_right_1 = best_coeffs_pair_right[1] / sigma_X_right
-        # alpha_right_0 = best_coeffs_pair_right[0] - (alpha_right_1 * mu_X_right) + (alpha_right_2 * mu_X_right**2) - (alpha_right_3 * mu_X_right**3)
-        # best_coeffs_pair_right = np.array([alpha_right_3, alpha_right_2, alpha_right_1, alpha_right_0])
         best_coeffs_pair = np.concatenate((best_coeffs_pair_left, best_coeffs_pair_right))
         # Convert the best_coeffs_pair to a 2D array with 4 columns
         best_coeffs_pair = best_coeffs_pair.reshape(-1, 4)

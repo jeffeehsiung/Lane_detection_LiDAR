@@ -159,7 +159,7 @@ class LaneDetectionSystem:
         return selected_indices
     
     
-    def optimize_k_means(self, pointcloud_T, max_n_clusters = 12, visualize=False):
+    def optimize_k_means(self, pointcloud_T, min_n_cluster = 3, max_n_clusters = 12, visualize=False):
         """
         Calculate silhouette score for a cluster of points to find the optimal number of clusters.
         - pointcloud_T: scaler transformed Open3D pointcloud objects
@@ -178,7 +178,7 @@ class LaneDetectionSystem:
         if visualize:
             df = pd.DataFrame(xy_T, columns=['x', 'y'])
 
-        min_n_cluster = 2
+        min_n_cluster = min_n_cluster
         for k in range(min_n_cluster, max_n_clusters):
             
             # Initialize the clusterer with n_clusters value and a random generator
@@ -194,7 +194,6 @@ class LaneDetectionSystem:
             # new columns for each kmeans cluster label in cluster_labels
             if visualize:
                 df[f'KMeans_{k}'] = cluster_labels
-                # df[f'DBSCAN_{k}'] = labels
                 
             # calculate the silhouette score
             silhouette_avg = silhouette_score(xy_T, cluster_labels)
@@ -235,9 +234,9 @@ class LaneDetectionSystem:
         - num_lanes: The number of lanes detected based on intensity peaks.
         """
         # select only a section based on x coordinates
-        selected_indices = (pointcloud.points[:, 0] > -20) & (pointcloud.points[:, 0] < 20)
+        selected_indices = (np.asarray(pointcloud.points)[:, 0] < -20) | (np.asarray(pointcloud.points)[:, 0] > 20)
         # extract the y coordinates and intensities
-        y = np.asarray(pointcloud.points[selected_indices])[:, 1]
+        y = np.asarray(pointcloud.points)[selected_indices, 1]
         intensities = np.asarray(attributes[selected_indices, 1])
         
         min_y, max_y = np.min(y), np.max(y)
@@ -293,7 +292,7 @@ class LaneDetectionSystem:
             slopes[cluster_label] = slope
         return slopes
 
-    def delete_orthogonal_slope(self, pcd, attributes, slopes, orthogonal_threshold=30):
+    def delete_orthogonal_slope(self, pcd, attributes, slopes):
         """
         Deletes points and corresponding attributes where the slope is almost orthogonal to the x-axis.
 
@@ -307,27 +306,24 @@ class LaneDetectionSystem:
         - filtered_pcd: The filtered Open3D point cloud object.
         - filtered_attributes: Filtered attributes corresponding to the filtered point cloud.
         """
-        # Convert slopes to angles
-        slope_angles = {k: np.arctan(v) * 180 / np.pi for k, v in slopes.items()}
-
-        # Filter out slopes that are nearly vertical
-        orthogonal_labels = [label for label, angle in slope_angles.items()
-                             if abs(angle) > orthogonal_threshold or abs(angle) < -orthogonal_threshold]
-
+        # mean slope
+        mean_slope = np.mean(list(slopes.values()))
+        # standard deviation of the slope
+        std_slope = np.std(list(slopes.values()))
+        # remove the slope that is too far from the mean
+        slopes = {label: slope for label, slope in slopes.items() if abs(slope - mean_slope) < 1.1 * std_slope}
+        print(f"mean slope: {mean_slope}, std slope: {std_slope}, slopes Labels: {slopes} ")
+        
         # Identify points to keep
         keep_indices = []
         for i, label in enumerate(attributes[:, -1]):  # Assuming last column is the cluster label
-            if label not in orthogonal_labels:
+            if label in slopes:
                 keep_indices.append(i)
-
-        # Filter the point cloud and attributes
-        filtered_pcd_points = np.asarray(pcd.points)[keep_indices]
-        filtered_attributes = attributes[keep_indices]
-
         # Create a new Open3D point cloud for filtered points
         filtered_pcd = o3d.geometry.PointCloud()
-        filtered_pcd.points = o3d.utility.Vector3dVector(filtered_pcd_points)
-
+        filtered_pcd.points = o3d.utility.Vector3dVector(np.asarray(pcd.points)[keep_indices])
+        filtered_attributes = attributes[keep_indices]
+        
         return filtered_pcd, filtered_attributes
 
 

@@ -60,7 +60,7 @@ class LaneMarker:
         return coefs, residuals
     
     
-    def create_grid_dict(self, pcd, attributes, max_lane_width=3.9):
+    def create_grid_dict(self, pcd, attributes, num_lanes, max_lane_width=3.9):
         """
         Creates a grid dictionary for a given range of x-coordinates, considering the slope of each lane segment.
 
@@ -82,7 +82,7 @@ class LaneMarker:
         
         # Calculate the range of x-coordinates
         min_x, max_x = points[:, 0].min(), points[:, 0].max()
-        line_of_sight = 1
+        line_of_sight = 1 # The distance ahead of the vehicle to consider for the grid bounds
         
         # Initialize the dictionary to store slopes for each segment
         slopes_dict = {}
@@ -114,13 +114,14 @@ class LaneMarker:
                 continue
             
             # Calculate the y-offset based on the current slope
-            y_offset = current_slope * (x_current - min_x) + (intercept/2)
+            # y_offset = current_slope * (x_current - min_x) + (intercept/num_lanes)
+            y_offset = current_slope * (x_current - min_x)
 
             # Define grid bounds taking into account the slope offset for y
-            grid_x_low_bound = (x_current -1) * line_of_sight
-            grid_x_up_bound = x_current * line_of_sight
-            grid_y_low_bound = -max_lane_width/1.1  + y_offset
-            grid_y_up_bound = max_lane_width/1.1 + y_offset
+            grid_x_low_bound = (x_current - line_of_sight)
+            grid_x_up_bound = x_current + line_of_sight
+            grid_y_low_bound = -max_lane_width*1.25  + y_offset
+            grid_y_up_bound = max_lane_width*1.25 + y_offset
 
             # Store the grid bounds
             grid_dict[(y_offset, x_current)] = [grid_x_up_bound, grid_x_low_bound, grid_y_up_bound, grid_y_low_bound]
@@ -129,19 +130,20 @@ class LaneMarker:
             x_current += 0.25
             
         # plot the points and on top of that plot the grid bounds
-        # fig, ax = plt.subplots()
-        # ax.scatter(points[:, 0], points[:, 1], c='b', label='Point Cloud')
-        # for grid_bounds in grid_dict.values():
-        #     x_up, x_low, y_up, y_low = grid_bounds
-        #     ax.plot([x_low, x_up], [y_up, y_up], c='r')
-        #     ax.plot([x_up, x_up], [y_up, y_low], c='r')
-        #     ax.plot([x_up, x_low], [y_low, y_low], c='r')
-        #     ax.plot([x_low, x_low], [y_low, y_up], c='r')
-        # ax.set_xlabel('X')
-        # ax.set_ylabel('Y')
-        # ax.set_title('Grid Bounds')
-        # plt.show()
+        fig, ax = plt.subplots()
+        ax.scatter(points[:, 0], points[:, 1], c='b', label='Point Cloud')
+        for grid_bounds in grid_dict.values():
+            x_up, x_low, y_up, y_low = grid_bounds
+            ax.plot([x_low, x_up], [y_up, y_up], c='r')
+            ax.plot([x_up, x_up], [y_up, y_low], c='r')
+            ax.plot([x_up, x_low], [y_low, y_low], c='r')
+            ax.plot([x_low, x_low], [y_low, y_up], c='r')
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_title('Grid Bounds')
+        plt.show()
         
+        # close the plot
         return grid_dict
 
 
