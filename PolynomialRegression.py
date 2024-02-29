@@ -5,6 +5,9 @@ from scipy.spatial import distance
 from scipy.optimize import fsolve
 from sklearn.metrics import mean_squared_error
 
+import warnings
+from numpy import RankWarning
+warnings.simplefilter('ignore', RankWarning)
 
 
 class PolynomialRegression(object):
@@ -64,19 +67,23 @@ class PolynomialRegression(object):
         # Calculate perpendicular distances for each x in x_range
         for x, y, dy_right in zip(x_range, y_right, y_deriv_right):
             # Define the perpendicular line at (x, y) of the right lane
-            perp_slope = -1 / dy_right if dy_right != 0 else np.inf
-            y_intercept = y - perp_slope * x
+            # perp_slope = -1 / dy_right if dy_right != 0 else np.inf
+            # y_intercept = y - perp_slope * x
 
-            # Define a function for the intersection with the left lane
-            def intersection_fun(x_intersect):
-                return perp_slope * x_intersect + y_intercept - poly_left(x_intersect)
+            # # Define a function for the intersection with the left lane
+            # def intersection_fun(x_intersect):
+            #     return perp_slope * x_intersect + y_intercept - poly_left(x_intersect)
 
-            # Use fsolve to find the intersection point
-            x_intersect = fsolve(intersection_fun, x)[0]
+            # # Use fsolve to find the intersection point
+            # x_intersect = fsolve(intersection_fun, x)[0]
 
-            # Calculate the perpendicular distance
-            y_intersect = perp_slope * x_intersect + y_intercept
-            dist = distance.euclidean([x_intersect, y_intersect], [x, y])
+            # # Calculate the perpendicular distance
+            # y_intersect = perp_slope * x_intersect + y_intercept
+            # dist = distance.euclidean([x_intersect, y_intersect], [x, y])
+            # interval_measured.append(dist)
+            
+            # calculate the shortest distance(orthogonal distance) between the two lines
+            dist = np.abs(poly_left(x) - poly_right(x)) / np.sqrt(1 + poly_left_deriv(x)**2)
             interval_measured.append(dist)
             
             # Calculate the slope difference

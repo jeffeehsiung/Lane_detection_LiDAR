@@ -192,9 +192,10 @@ class LaneDetectionSystem:
             # labels = db.labels_
             
             # new columns for each kmeans cluster label in cluster_labels
-            df[f'KMeans_{k}'] = cluster_labels
-            # df[f'DBSCAN_{k}'] = labels
-            
+            if visualize:
+                df[f'KMeans_{k}'] = cluster_labels
+                # df[f'DBSCAN_{k}'] = labels
+                
             # calculate the silhouette score
             silhouette_avg = silhouette_score(xy_T, cluster_labels)
             
@@ -253,12 +254,12 @@ class LaneDetectionSystem:
         # convert back the y with peak intensity to the original scale
         y_peak_coordinates = y_bins[peaks_bin]
         print(f"Number of lanes detected: {num_lanes} at y-coordinates: {y_peak_coordinates}")
-        # plot the intensity histogram with the peaks
-        plt.plot(y_bins[1:], intensity_histogram)
-        plt.plot(y_bins[peaks_bin], intensity_histogram[peaks_bin], "x")
-        plt.xlabel('y-coordinate')
-        plt.ylabel('intensity')
-        plt.show()
+        # # plot the intensity histogram with the peaks
+        # plt.plot(y_bins[1:], intensity_histogram)
+        # plt.plot(y_bins[peaks_bin], intensity_histogram[peaks_bin], "x")
+        # plt.xlabel('y-coordinate')
+        # plt.ylabel('intensity')
+        # plt.show()
         
         
         return num_lanes, y_peak_coordinates

@@ -96,7 +96,7 @@ if __name__ == "__main__":
         filtered_pcd.points = o3d.utility.Vector3dVector(filtered_points)
         filtered_attributes = updated_attributes[selected_indices]
         
-        data_visualizer.visualize_lane_detection(pcd, filtered_pcd)
+        # data_visualizer.visualize_lane_detection(pcd, filtered_pcd)
         # Replace the original pcd and attributes with the filtered ones
         pointclouds_with_attributes[i] = (filtered_pcd, filtered_attributes)
         num_lanes, y_peaks_coordinates = lane_detection_system.find_number_of_lanes(filtered_pcd, filtered_attributes, percentile = 1, min_num_peaks=2)
@@ -104,7 +104,7 @@ if __name__ == "__main__":
         # normalize the point cloud
         # filtered_pcd = data_preprocess_system.scaler_transform(filtered_pcd)
         # cluster the point cloud into lanes
-        num_slopes = lane_detection_system.optimize_k_means(filtered_pcd, max_n_clusters = num_lanes + 1, visualize=True)
+        num_slopes = lane_detection_system.optimize_k_means(filtered_pcd, max_n_clusters = num_lanes + 1)
         print(f"Number of lanes: {num_slopes}") 
         # cluster the point cloud into lanes using k-means
         kmeans = KMeans(n_clusters=num_slopes, random_state=10, n_init=10, max_iter=300)
@@ -120,8 +120,6 @@ if __name__ == "__main__":
         # delete the point cloud and attributes with the slope orthogonal to the x-axis 
         filtered_pcd, filtered_attributes = lane_detection_system.delete_orthogonal_slope(filtered_pcd, filtered_attributes, slopes)
         
-        
-        
         # grid_dict = lane_marker.create_grid_dict(min_x, max_x)
         grid_dict = lane_marker.create_grid_dict(filtered_pcd, filtered_attributes)
         # conver pointcloud to np.array
@@ -129,6 +127,7 @@ if __name__ == "__main__":
         min_x = np.floor(np.min(filtered_pcd_array[:, 0])).astype(int)
         max_x = np.ceil(np.max(filtered_pcd_array[:, 0])).astype(int) 
         data_in_grid = lane_marker.filter_lidar_data_by_grid(filtered_pcd_array, grid_dict)
+        min_x
         
         poly_degree = 3
         # shape of lidar_data
@@ -139,8 +138,8 @@ if __name__ == "__main__":
 
         iteration = 0
         max_iter = 1000
-        # prev_error = 1000
-        prev_error = float('inf')
+        prev_error = 1000
+        # prev_error = float('inf')
         best_coeffs_pair_left = None
         best_coeffs_pair_right = None
         
@@ -167,34 +166,35 @@ if __name__ == "__main__":
                 y_left = data_repres_left[:, 1]
                 X_right = data_repres_right[:, 0].reshape(-1, 1)
                 y_right = data_repres_right[:, 1]
-                # Create scalers for X and y (if y scaling is desired)
-                scaler_X_left = StandardScaler().fit(X_left)
-                scaler_X_right = StandardScaler().fit(X_right)
-                # mu_X for X before scaling
-                mu_X_left = scaler_X_left.mean_
-                mu_X_right = scaler_X_right.mean_
-                # sigma_X for standard deviation of X before scaling
-                sigma_X_left = scaler_X_left.scale_
-                sigma_X_right = scaler_X_right.scale_
-                # Scale the data
-                X_left_scaled = scaler_X_left.transform(X_left)
-                X_right_scaled = scaler_X_right.transform(X_right)
+                # # Create scalers for X and y (if y scaling is desired)
+                # scaler_X_left = StandardScaler().fit(X_left)
+                # scaler_X_right = StandardScaler().fit(X_right)
+                # # mu_X for X before scaling
+                # mu_X_left = scaler_X_left.mean_
+                # mu_X_right = scaler_X_right.mean_
+                # # sigma_X for standard deviation of X before scaling
+                # sigma_X_left = scaler_X_left.scale_
+                # sigma_X_right = scaler_X_right.scale_
+                # # Scale the data
+                # X_left_scaled = scaler_X_left.transform(X_left)
+                # X_right_scaled = scaler_X_right.transform(X_right)
                                 
                 # Polynomial Fitting with RANSAC
                 model_left = RANSACRegressor(PolynomialRegression(degree = poly_degree),
                                              min_samples = 7,
                                              max_trials = 10000,
                                              random_state=0)
-                model_left.fit(X_left_scaled, y_left)
+                model_left.fit(X_left, y_left)
+                # model_left.fit(X_left_scaled, y_left)
                 left_lane_coeffs = model_left.estimator_.get_params(deep = True)["coeffs"]
                 
                 model_right = RANSACRegressor(PolynomialRegression(degree = poly_degree),
                                               min_samples = 7,
                                               max_trials = 10000,
                                               random_state=0)
-                model_right.fit(X_right_scaled, y_right)
+                model_right.fit(X_right, y_right)
+                # model_right.fit(X_right_scaled, y_right)
                 right_lane_coeffs = model_right.estimator_.get_params(deep = True)["coeffs"] # corresponds to coefficients for order from highest to lowest
-                
                 # Model Evaluation (this is a placeholder for whatever metric you use)
                 current_error = PolynomialRegression.cost(left_lane_coeffs, right_lane_coeffs, np.linspace(min_x, max_x, num=100))
                 
@@ -205,24 +205,25 @@ if __name__ == "__main__":
                     best_coeffs_pair_right = right_lane_coeffs
                 
             iteration += 1
+            # print(f"Iteration: {iteration}, Error: {prev_error}")
         
-        # convert the coefficients back to the original scale
-        alpha_left_3 = best_coeffs_pair_left[3] / sigma_X_left**3
-        alpha_left_2 = best_coeffs_pair_left[2] / sigma_X_left**2
-        alpha_left_1 = best_coeffs_pair_left[1] / sigma_X_left
-        alpha_left_0 = best_coeffs_pair_left[0] - (alpha_left_1 * mu_X_left) + (alpha_left_2 * mu_X_left**2) - (alpha_left_3 * mu_X_left**3)
-        best_coeffs_pair_left = np.array([alpha_left_3, alpha_left_2, alpha_left_1, alpha_left_0])
-        alpha_right_3 = best_coeffs_pair_right[3] / sigma_X_right**3
-        alpha_right_2 = best_coeffs_pair_right[2] / sigma_X_right**2
-        alpha_right_1 = best_coeffs_pair_right[1] / sigma_X_right
-        alpha_right_0 = best_coeffs_pair_right[0] - (alpha_right_1 * mu_X_right) + (alpha_right_2 * mu_X_right**2) - (alpha_right_3 * mu_X_right**3)
-        best_coeffs_pair_right = np.array([alpha_right_3, alpha_right_2, alpha_right_1, alpha_right_0])
-        best_coeffs_pair = np.append(best_coeffs_pair_left, best_coeffs_pair_right, axis = 0)
-
+        # # convert the coefficients back to the original scale
+        # alpha_left_3 = best_coeffs_pair_left[3] / sigma_X_left**3
+        # alpha_left_2 = best_coeffs_pair_left[2] / sigma_X_left**2
+        # alpha_left_1 = best_coeffs_pair_left[1] / sigma_X_left
+        # alpha_left_0 = best_coeffs_pair_left[0] - (alpha_left_1 * mu_X_left) + (alpha_left_2 * mu_X_left**2) - (alpha_left_3 * mu_X_left**3)
+        # best_coeffs_pair_left = np.array([alpha_left_3, alpha_left_2, alpha_left_1, alpha_left_0])
+        # alpha_right_3 = best_coeffs_pair_right[3] / sigma_X_right**3
+        # alpha_right_2 = best_coeffs_pair_right[2] / sigma_X_right**2
+        # alpha_right_1 = best_coeffs_pair_right[1] / sigma_X_right
+        # alpha_right_0 = best_coeffs_pair_right[0] - (alpha_right_1 * mu_X_right) + (alpha_right_2 * mu_X_right**2) - (alpha_right_3 * mu_X_right**3)
+        # best_coeffs_pair_right = np.array([alpha_right_3, alpha_right_2, alpha_right_1, alpha_right_0])
+        best_coeffs_pair = np.concatenate((best_coeffs_pair_left, best_coeffs_pair_right))
         # Convert the best_coeffs_pair to a 2D array with 4 columns
         best_coeffs_pair = best_coeffs_pair.reshape(-1, 4)
+        print(f"Best coefficients: {best_coeffs_pair}")
         # Ensure the output directory exists
-        output_dir = 'sample_output_test'
+        output_dir = 'sample_output'
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         # Save the coefficients to a text file
