@@ -167,21 +167,33 @@ if __name__ == "__main__":
                 y_left = data_repres_left[:, 1]
                 X_right = data_repres_right[:, 0].reshape(-1, 1)
                 y_right = data_repres_right[:, 1]
-                
+                # Create scalers for X and y (if y scaling is desired)
+                scaler_X_left = StandardScaler().fit(X_left)
+                scaler_X_right = StandardScaler().fit(X_right)
+                # mu_X for X before scaling
+                mu_X_left = scaler_X_left.mean_
+                mu_X_right = scaler_X_right.mean_
+                # sigma_X for standard deviation of X before scaling
+                sigma_X_left = scaler_X_left.scale_
+                sigma_X_right = scaler_X_right.scale_
+                # Scale the data
+                X_left_scaled = scaler_X_left.transform(X_left)
+                X_right_scaled = scaler_X_right.transform(X_right)
+                                
                 # Polynomial Fitting with RANSAC
                 model_left = RANSACRegressor(PolynomialRegression(degree = poly_degree),
-                                             min_samples = int(min_samples*0.5),
+                                             min_samples = 7,
                                              max_trials = 10000,
                                              random_state=0)
-                model_left.fit(X_left, y_left)
+                model_left.fit(X_left_scaled, y_left)
                 left_lane_coeffs = model_left.estimator_.get_params(deep = True)["coeffs"]
                 
                 model_right = RANSACRegressor(PolynomialRegression(degree = poly_degree),
-                                              min_samples = int(min_samples*0.5),
+                                              min_samples = 7,
                                               max_trials = 10000,
                                               random_state=0)
-                model_right.fit(X_right, y_right)
-                right_lane_coeffs = model_right.estimator_.get_params(deep = True)["coeffs"]
+                model_right.fit(X_right_scaled, y_right)
+                right_lane_coeffs = model_right.estimator_.get_params(deep = True)["coeffs"] # corresponds to coefficients for order from highest to lowest
                 
                 # Model Evaluation (this is a placeholder for whatever metric you use)
                 current_error = PolynomialRegression.cost(left_lane_coeffs, right_lane_coeffs, np.linspace(min_x, max_x, num=100))
@@ -193,63 +205,19 @@ if __name__ == "__main__":
                     best_coeffs_pair_right = right_lane_coeffs
                 
             iteration += 1
-            
+        
+        # convert the coefficients back to the original scale
+        alpha_left_3 = best_coeffs_pair_left[3] / sigma_X_left**3
+        alpha_left_2 = best_coeffs_pair_left[2] / sigma_X_left**2
+        alpha_left_1 = best_coeffs_pair_left[1] / sigma_X_left
+        alpha_left_0 = best_coeffs_pair_left[0] - (alpha_left_1 * mu_X_left) + (alpha_left_2 * mu_X_left**2) - (alpha_left_3 * mu_X_left**3)
+        best_coeffs_pair_left = np.array([alpha_left_3, alpha_left_2, alpha_left_1, alpha_left_0])
+        alpha_right_3 = best_coeffs_pair_right[3] / sigma_X_right**3
+        alpha_right_2 = best_coeffs_pair_right[2] / sigma_X_right**2
+        alpha_right_1 = best_coeffs_pair_right[1] / sigma_X_right
+        alpha_right_0 = best_coeffs_pair_right[0] - (alpha_right_1 * mu_X_right) + (alpha_right_2 * mu_X_right**2) - (alpha_right_3 * mu_X_right**3)
+        best_coeffs_pair_right = np.array([alpha_right_3, alpha_right_2, alpha_right_1, alpha_right_0])
         best_coeffs_pair = np.append(best_coeffs_pair_left, best_coeffs_pair_right, axis = 0)
-
-
-        # start = time.time()
-        # while iteration <= max_iter:
-        #     for y in (-1, 1):
-        #         for x in range(min_x, max_x + 1):
-        #             if y == -1:
-        #                 if len(data_in_grid[y, x]) >= min_samples:
-        #                     idx = np.random.randint(len(data_in_grid[y, x]), size = poly_degree)
-        #                     data_repres_left = np.append(data_repres_left, data_in_grid[y, x][idx, :], axis = 0)
-        #                 elif len(data_in_grid[y, x]) == 0:
-        #                     pass
-        #                 else:
-        #                     idx = np.random.randint(len(data_in_grid[y, x]), size = len(data_in_grid[y,x]))
-        #                     data_repres_left = np.append(data_repres_left, data_in_grid[y, x][idx, :], axis = 0)
-
-        #             elif y == 1:
-        #                 if len(data_in_grid[y, x]) >= min_samples:
-        #                     idx = np.random.randint(len(data_in_grid[y, x]), size = poly_degree)
-        #                     data_repres_right = np.append(data_repres_right, data_in_grid[y, x][idx, :], axis = 0)
-        #                 elif len(data_in_grid[y, x]) == 0:
-        #                     pass
-        #                 else:
-        #                     idx = np.random.randint(len(data_in_grid[y, x]), size = len(data_in_grid[y,x]))
-        #                     data_repres_right = np.append(data_repres_right, data_in_grid[y, x][idx, :], axis = 0)
-                            
-        #     left_grids_x = np.sort(data_repres_left, axis = 0)[:, 0] 
-        #     left_grids_y = np.sort(data_repres_left, axis = 0)[:, 1]
-        #     right_grids_x = np.sort(data_repres_right, axis = 0)[:, 0] 
-        #     right_grids_y = np.sort(data_repres_right, axis = 0)[:, 1]
-
-        #     ransac_up = RANSACRegressor(PolynomialRegression(degree = poly_degree),
-        #                             min_samples = int(min_samples*0.5),    
-        #                             max_trials = 10000,
-        #                             random_state=0)
-        #     ransac_up.fit(np.expand_dims(left_grids_x, axis=1), left_grids_y)
-        #     left_grids_y_pred = ransac_up.predict(np.expand_dims(left_grids_x, axis=1))
-        #     left_lane_coeffs= ransac_up.estimator_.get_params(deep = True)["coeffs"]
-
-        #     ransac_down = RANSACRegressor(PolynomialRegression(degree = poly_degree), 
-        #                             min_samples = int(min_samples*0.5),    
-        #                             max_trials = 10000,
-        #                             random_state=0)
-        #     ransac_down.fit(np.expand_dims(right_grids_x, axis=1), right_grids_y)
-        #     right_grids_y_pred = ransac_down.predict(np.expand_dims(right_grids_x, axis=1))
-        #     right_lane_coeffs = ransac_down.estimator_.get_params(deep = True)["coeffs"]
-            
-        #     ego_lane_coeffs_pair = np.append(right_lane_coeffs, left_lane_coeffs, axis = 0) 
-        #     curr_error = PolynomialRegression.cost(left_lane_coeffs, right_lane_coeffs, np.linspace(min_x, max_x, num=100))      
-            
-        #     if curr_error < prev_error:
-        #         prev_error = curr_error 
-        #         best_coeffs_pair = ego_lane_coeffs_pair
-
-        #     iteration += 1
 
         # Convert the best_coeffs_pair to a 2D array with 4 columns
         best_coeffs_pair = best_coeffs_pair.reshape(-1, 4)
