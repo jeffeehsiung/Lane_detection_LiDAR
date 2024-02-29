@@ -28,6 +28,9 @@ if __name__ == "__main__":
     lane_detection_system = LaneDetectionSystem()
     lane_marker = LaneMarker()
     data_visualizer = DataVisualizer()
+    
+    poly_degree = 3
+    poly_regression = PolynomialRegression(degree = poly_degree)
 
     # Example of preprocessing a point cloud
     pointclouds_with_attributes = data_preprocess_system.load_pointclouds_with_attributes(folder_path)  # Assuming you're working with the first point cloud
@@ -78,7 +81,7 @@ if __name__ == "__main__":
         best_labels = lane_detection_system.cluster_with_dbscan(pcd, eps, min_samples)
         updated_attributes = np.hstack((attributes, best_labels.reshape(-1, 1)))  # Append labels as a new column
         # Learn intensity threshold from clusters    
-        intensity_threshold = lane_detection_system.learn_intensity_threshold(updated_attributes, percentage=0.7)
+        intensity_threshold = lane_detection_system.learn_intensity_threshold(updated_attributes, percentage=0.5)
         
         # Filter clusters based on intensity and geometric shape
         selected_indices = lane_detection_system.intensity_filter(updated_attributes, intensity_threshold)
@@ -96,10 +99,13 @@ if __name__ == "__main__":
         filtered_pcd.points = o3d.utility.Vector3dVector(filtered_points)
         filtered_attributes = updated_attributes[selected_indices]
         
+        # sort the point clouds and attributes based on the x-axis
+        filtered_pcd, filtered_attributes = lane_detection_system.sort_point_cloud(filtered_pcd, filtered_attributes)
+        
         # data_visualizer.visualize_lane_detection(pcd, filtered_pcd)
         # Replace the original pcd and attributes with the filtered ones
         pointclouds_with_attributes[i] = (filtered_pcd, filtered_attributes)
-        num_lanes, y_peaks_coordinates = lane_detection_system.find_number_of_lanes(filtered_pcd, filtered_attributes, percentile = 1, min_num_peaks=2)
+        num_lanes, y_peaks_coordinates = lane_detection_system.find_number_of_lanes(filtered_pcd, filtered_attributes, percentile = 50, min_num_peaks=2)
         
         # normalize the point cloud
         # filtered_pcd = data_preprocess_system.scaler_transform(filtered_pcd)
@@ -127,9 +133,7 @@ if __name__ == "__main__":
         min_x = np.floor(np.min(filtered_pcd_array[:, 0])).astype(int)
         max_x = np.ceil(np.max(filtered_pcd_array[:, 0])).astype(int) 
         data_in_grid = lane_marker.filter_lidar_data_by_grid(filtered_pcd_array, grid_dict)
-        min_x
         
-        poly_degree = 3
         # shape of lidar_data
         n = filtered_pcd_array.shape[1]
         
@@ -137,7 +141,7 @@ if __name__ == "__main__":
         data_repres_right = np.empty((0, n)) 
 
         iteration = 0
-        max_iter = 500
+        max_iter = 200
         prev_error = 1000
         # prev_error = float('inf')
         best_coeffs_pair_left = None
@@ -178,9 +182,9 @@ if __name__ == "__main__":
                 # # Scale the data
                 # X_left_scaled = scaler_X_left.transform(X_left)
                 # X_right_scaled = scaler_X_right.transform(X_right)
-                                
+                
                 # Polynomial Fitting with RANSAC
-                model_left = RANSACRegressor(PolynomialRegression(degree = poly_degree),
+                model_left = RANSACRegressor(poly_regression,
                                              min_samples = 7,
                                              max_trials = 10000,
                                              random_state=0)
@@ -188,7 +192,7 @@ if __name__ == "__main__":
                 # model_left.fit(X_left_scaled, y_left)
                 left_lane_coeffs = model_left.estimator_.get_params(deep = True)["coeffs"]
                 
-                model_right = RANSACRegressor(PolynomialRegression(degree = poly_degree),
+                model_right = RANSACRegressor(poly_regression,
                                               min_samples = 7,
                                               max_trials = 10000,
                                               random_state=0)
@@ -200,7 +204,7 @@ if __name__ == "__main__":
                 left_error = np.mean((model_left.predict(X_left) - y_left) ** 2)
                 right_error = np.mean((model_right.predict(X_right) - y_right) ** 2)
                 current_error = left_error + right_error
-                current_error += PolynomialRegression.cost(left_lane_coeffs, right_lane_coeffs, np.linspace(min_x, max_x, num=100), parallelism_weight=100)
+                current_error += poly_regression.cost(left_lane_coeffs=left_lane_coeffs,right_lane_coeffs=right_lane_coeffs, x_range=np.linspace(min_x, max_x, num=400), parallelism_weight=500)
                 
                 # Update best model based on error
                 if current_error < prev_error:
@@ -209,10 +213,6 @@ if __name__ == "__main__":
                     best_coeffs_pair_right = right_lane_coeffs
                 
             iteration += 1
-            if current_error < 18:
-                print(f"Iteration: {iteration}, Error: {prev_error}")
-                break
-        
         
         # # convert the coefficients back to the original scale
         # alpha_left_3 = best_coeffs_pair_left[3] / sigma_X_left**3

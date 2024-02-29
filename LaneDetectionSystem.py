@@ -234,9 +234,11 @@ class LaneDetectionSystem:
         Returns:
         - num_lanes: The number of lanes detected based on intensity peaks.
         """
-        # Extract the y-coordinates and intensities
-        y = np.asarray(pointcloud.points)[:, 1]
-        intensities = np.asarray(attributes[:, 1])
+        # select only a section based on x coordinates
+        selected_indices = (pointcloud.points[:, 0] > -20) & (pointcloud.points[:, 0] < 20)
+        # extract the y coordinates and intensities
+        y = np.asarray(pointcloud.points[selected_indices])[:, 1]
+        intensities = np.asarray(attributes[selected_indices, 1])
         
         min_y, max_y = np.min(y), np.max(y)
         
@@ -244,12 +246,14 @@ class LaneDetectionSystem:
         lane_width = 3.75
         max_num_lanes = 6
         max_two_way_width = lane_width * max_num_lanes * 2
+        
         # define number of y bins based on the maximum two way width
         y_bins = np.linspace(min_y, max_y, int(max_two_way_width))
         intensity_histogram, _ = np.histogram(y, bins=y_bins, weights=intensities)
-        
+        # percentile of the intensity
+        threshold = np.percentile(intensity_histogram, percentile)
         # find the peaks in the intensity histogram that are larger than the threshold
-        peaks_bin, _ = find_peaks(intensity_histogram, height=0)
+        peaks_bin, _ = find_peaks(intensity_histogram, height=threshold, distance=lane_width/3)
         num_lanes = max(min_num_peaks, len(peaks_bin))
         # convert back the y with peak intensity to the original scale
         y_peak_coordinates = y_bins[peaks_bin]
@@ -260,7 +264,6 @@ class LaneDetectionSystem:
         # plt.xlabel('y-coordinate')
         # plt.ylabel('intensity')
         # plt.show()
-        
         
         return num_lanes, y_peak_coordinates
     
@@ -327,6 +330,31 @@ class LaneDetectionSystem:
 
         return filtered_pcd, filtered_attributes
 
+
+    def sort_point_cloud(self, pcd, attributes):
+        """
+        Sorts the point cloud based on the x-coordinate and assigns a new index to the points.
+
+        Parameters:
+        - pcd: The Open3D point cloud object to sort.
+        - attributes: Attributes corresponding to each point in the point cloud.
+
+        Returns:
+        - sorted_pcd: The sorted Open3D point cloud object.
+        - sorted_attributes: Sorted attributes corresponding to the sorted point cloud.
+        """
+        # Convert Open3D point cloud to NumPy array
+        points = np.asarray(pcd.points)
+        # Sort the points based on the x-coordinate
+        sorted_indices = np.argsort(points[:, 0])
+        sorted_points = points[sorted_indices]
+        sorted_attributes = attributes[sorted_indices]
+
+        # Create a new Open3D point cloud for sorted points
+        sorted_pcd = o3d.geometry.PointCloud()
+        sorted_pcd.points = o3d.utility.Vector3dVector(sorted_points)
+
+        return sorted_pcd, sorted_attributes
 
     def segregate_points_based_on_lanes(self, filtered_points, filtered_attributes, y_peak_coordinates, threshold_intensity, num_bins=100):
         """

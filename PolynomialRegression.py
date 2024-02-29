@@ -10,7 +10,7 @@ from numpy import RankWarning
 warnings.simplefilter('ignore', RankWarning)
 
 
-class PolynomialRegression(object):
+class PolynomialRegression:
     def __init__(self, degree=3, coeffs=None):
         self.degree = degree
         self.coeffs = coeffs
@@ -32,7 +32,7 @@ class PolynomialRegression(object):
     def score(self, X, y):
         return mean_squared_error(y, self.predict(X))
     
-    def cost(left_lane_coeffs, right_lane_coeffs, x_range, parallelism_weight=1):
+    def cost(self, left_lane_coeffs, right_lane_coeffs, x_range, parallelism_weight=100):
         """
         Calculate the cost by considering both the mean squared error between the true lane width
         and the measured lane width across a range of x-values, and the difference in slopes
@@ -66,7 +66,7 @@ class PolynomialRegression(object):
 
         # Calculate perpendicular distances for each x in x_range
         for x, y, dy_right, dy_left in zip(x_range, y_right, y_deriv_right, y_deriv_left):
-            # Define the perpendicular line at (x, y) of the right lane
+            # # Define the perpendicular line at (x, y) of the right lane
             # perp_slope = -1 / dy_right if dy_right != 0 else np.inf
             # y_intercept = y - perp_slope * x
 
@@ -97,7 +97,7 @@ class PolynomialRegression(object):
 
         # Calculate the mean of slope differences as the parallelism penalty
         parallelism_penalty = np.mean(slope_differences)
-
+    
         # Total cost combines interval cost and parallelism penalty
         total_cost = cost_intervals + parallelism_weight * parallelism_penalty
         

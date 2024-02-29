@@ -58,39 +58,6 @@ class LaneMarker:
             coefs, residuals, _, _, _ = np.polyfit(lanes[closest_right_lane][:, 0], lanes[closest_right_lane][:, 1], 3, full=True)
             lane_fits['right'] = {'coefs': coefs, 'residuals': residuals}
         return coefs, residuals
-
-
-    # def create_grid_dict(self, min_x, max_x, max_lane_width=3.9, line_of_sight=10):
-    #     """
-    #     Creates a grid dictionary for a given range of x-coordinates.
-
-    #     Args:
-    #     - min_x (int): The minimum x-coordinate.
-    #     - max_x (int): The maximum x-coordinate.
-    #     - max_lane_width (float, optional): The maximum width of a lane. Defaults to 3.9.
-    #     - line_of_sight (int, optional): The line of sight distance used to calculate grid bounds. Defaults to 10.
-
-    #     Returns:
-    #     - dict: A dictionary with grid coordinates as keys and grid bounds as values.
-    #     """
-    #     grid_dict = {}
-    #     for y in (-1, 1):
-    #         for x in range(min_x, max_x + 1):
-    #             if y == -1:
-    #                 grid_x_up_bound = x * line_of_sight
-    #                 grid_x_low_bound = (x - 1) * line_of_sight
-    #                 grid_y_up_bound = (y + 1) * max_lane_width
-    #                 grid_y_low_bound = y * max_lane_width
-    #             else:
-    #                 grid_x_up_bound = x * line_of_sight
-    #                 grid_x_low_bound = (x - 1) * line_of_sight
-    #                 grid_y_up_bound = y * max_lane_width
-    #                 grid_y_low_bound = (y - 1) * max_lane_width
-
-    #             grid = [grid_x_up_bound, grid_x_low_bound, grid_y_up_bound, grid_y_low_bound]
-    #             coord = (y, x)
-    #             grid_dict[coord] = grid
-    #     return grid_dict
     
     
     def create_grid_dict(self, pcd, attributes, max_lane_width=3.9):
@@ -108,8 +75,10 @@ class LaneMarker:
 
         # Convert Open3D point cloud to NumPy array
         points = np.asarray(pcd.points)
-        # sort the points based on the x-coordinate
-        points = points[points[:, 0].argsort()]
+        # sort the points and intensities based on the x-coordinate
+        sorted_indices = np.argsort(points[:, 0])
+        points = points[sorted_indices]
+        attributes = attributes[sorted_indices]
         
         # Calculate the range of x-coordinates
         min_x, max_x = points[:, 0].min(), points[:, 0].max()
@@ -150,8 +119,8 @@ class LaneMarker:
             # Define grid bounds taking into account the slope offset for y
             grid_x_low_bound = (x_current -1) * line_of_sight
             grid_x_up_bound = x_current * line_of_sight
-            grid_y_low_bound = -max_lane_width/1.12  + y_offset
-            grid_y_up_bound = max_lane_width/1.12 + y_offset
+            grid_y_low_bound = -max_lane_width/1.1  + y_offset
+            grid_y_up_bound = max_lane_width/1.1 + y_offset
 
             # Store the grid bounds
             grid_dict[(y_offset, x_current)] = [grid_x_up_bound, grid_x_low_bound, grid_y_up_bound, grid_y_low_bound]
