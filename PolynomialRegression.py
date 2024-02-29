@@ -65,7 +65,7 @@ class PolynomialRegression(object):
         slope_differences = []
 
         # Calculate perpendicular distances for each x in x_range
-        for x, y, dy_right in zip(x_range, y_right, y_deriv_right):
+        for x, y, dy_right, dy_left in zip(x_range, y_right, y_deriv_right, y_deriv_left):
             # Define the perpendicular line at (x, y) of the right lane
             # perp_slope = -1 / dy_right if dy_right != 0 else np.inf
             # y_intercept = y - perp_slope * x
@@ -87,7 +87,6 @@ class PolynomialRegression(object):
             interval_measured.append(dist)
             
             # Calculate the slope difference
-            dy_left = poly_left_deriv(x)
             slope_difference = np.abs(dy_right - dy_left)
             slope_differences.append(slope_difference)
 

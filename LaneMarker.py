@@ -160,18 +160,18 @@ class LaneMarker:
             x_current += 0.25
             
         # plot the points and on top of that plot the grid bounds
-        fig, ax = plt.subplots()
-        ax.scatter(points[:, 0], points[:, 1], c='b', label='Point Cloud')
-        for grid_bounds in grid_dict.values():
-            x_up, x_low, y_up, y_low = grid_bounds
-            ax.plot([x_low, x_up], [y_up, y_up], c='r')
-            ax.plot([x_up, x_up], [y_up, y_low], c='r')
-            ax.plot([x_up, x_low], [y_low, y_low], c='r')
-            ax.plot([x_low, x_low], [y_low, y_up], c='r')
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_title('Grid Bounds')
-        plt.show()
+        # fig, ax = plt.subplots()
+        # ax.scatter(points[:, 0], points[:, 1], c='b', label='Point Cloud')
+        # for grid_bounds in grid_dict.values():
+        #     x_up, x_low, y_up, y_low = grid_bounds
+        #     ax.plot([x_low, x_up], [y_up, y_up], c='r')
+        #     ax.plot([x_up, x_up], [y_up, y_low], c='r')
+        #     ax.plot([x_up, x_low], [y_low, y_low], c='r')
+        #     ax.plot([x_low, x_low], [y_low, y_up], c='r')
+        # ax.set_xlabel('X')
+        # ax.set_ylabel('Y')
+        # ax.set_title('Grid Bounds')
+        # plt.show()
         
         return grid_dict
 
