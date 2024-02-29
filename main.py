@@ -61,7 +61,7 @@ if __name__ == "__main__":
                     best_params['eps'] = eps
                     best_params['min_samples'] = min_samples
 
-        print(f"Best parameters: {best_params}, Best score: {best_score}")
+        # print(f"Best parameters: {best_params}, Best score: {best_score}")
 
         eps = best_params['eps']  # Use tuned eps value
         min_samples = best_params['min_samples']  # Use tuned min_samples value
@@ -105,7 +105,7 @@ if __name__ == "__main__":
         # filtered_pcd = data_preprocess_system.scaler_transform(filtered_pcd)
         # cluster the point cloud into lanes
         num_slopes = lane_detection_system.optimize_k_means(filtered_pcd, max_n_clusters = num_lanes + 1)
-        print(f"Number of lanes: {num_slopes}") 
+        # print(f"Number of lanes: {num_slopes}") 
         # cluster the point cloud into lanes using k-means
         kmeans = KMeans(n_clusters=num_slopes, random_state=10, n_init=10, max_iter=300)
         cluster_labels = kmeans.fit_predict(np.asarray(filtered_pcd.points)[:, :2])
@@ -115,7 +115,7 @@ if __name__ == "__main__":
         
         # calculate the slope of each slope cluster
         slopes = lane_detection_system.calculate_slope(filtered_pcd, filtered_attributes, num_slopes)
-        print(f"Slopes: {slopes}")
+        # print(f"Slopes: {slopes}")
         
         # delete the point cloud and attributes with the slope orthogonal to the x-axis 
         filtered_pcd, filtered_attributes = lane_detection_system.delete_orthogonal_slope(filtered_pcd, filtered_attributes, slopes)
