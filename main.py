@@ -121,7 +121,7 @@ if __name__ == "__main__":
         filtered_pcd, filtered_attributes = lane_detection_system.delete_orthogonal_slope(filtered_pcd, filtered_attributes, slopes)
         
         # grid_dict = lane_marker.create_grid_dict(min_x, max_x)
-        grid_dict = lane_marker.create_grid_dict(filtered_pcd, filtered_attributes)
+        grid_dict = lane_marker.create_grid_dict(filtered_pcd, filtered_attributes, max_lane_width = 3.9)
         # conver pointcloud to np.array
         filtered_pcd_array = np.asarray(filtered_pcd.points)
         min_x = np.floor(np.min(filtered_pcd_array[:, 0])).astype(int)
@@ -137,7 +137,7 @@ if __name__ == "__main__":
         data_repres_right = np.empty((0, n)) 
 
         iteration = 0
-        max_iter = 1000
+        max_iter = 500
         prev_error = 1000
         # prev_error = float('inf')
         best_coeffs_pair_left = None
@@ -196,7 +196,11 @@ if __name__ == "__main__":
                 # model_right.fit(X_right_scaled, y_right)
                 right_lane_coeffs = model_right.estimator_.get_params(deep = True)["coeffs"] # corresponds to coefficients for order from highest to lowest
                 # Model Evaluation (this is a placeholder for whatever metric you use)
-                current_error = PolynomialRegression.cost(left_lane_coeffs, right_lane_coeffs, np.linspace(min_x, max_x, num=100))
+                # Model Evaluation (this is a placeholder for whatever metric you use)
+                left_error = np.mean((model_left.predict(X_left) - y_left) ** 2)
+                right_error = np.mean((model_right.predict(X_right) - y_right) ** 2)
+                current_error = left_error + right_error
+                current_error += PolynomialRegression.cost(left_lane_coeffs, right_lane_coeffs, np.linspace(min_x, max_x, num=100), parallelism_weight=100)
                 
                 # Update best model based on error
                 if current_error < prev_error:
@@ -205,7 +209,10 @@ if __name__ == "__main__":
                     best_coeffs_pair_right = right_lane_coeffs
                 
             iteration += 1
-            # print(f"Iteration: {iteration}, Error: {prev_error}")
+            if current_error < 18:
+                print(f"Iteration: {iteration}, Error: {prev_error}")
+                break
+        
         
         # # convert the coefficients back to the original scale
         # alpha_left_3 = best_coeffs_pair_left[3] / sigma_X_left**3

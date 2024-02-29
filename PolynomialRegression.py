@@ -91,9 +91,8 @@ class PolynomialRegression(object):
             slope_difference = np.abs(dy_right - dy_left)
             slope_differences.append(slope_difference)
 
-        # True interval is assumed to be constant (e.g., 3 meters)
+        # True interval is assumed to be in between 3 to 3.75 meters, or 3
         interval_truth = np.full_like(x_range, 3)
-
         # Calculate MSE for intervals as the cost
         cost_intervals = mean_squared_error(interval_truth, interval_measured)
 
