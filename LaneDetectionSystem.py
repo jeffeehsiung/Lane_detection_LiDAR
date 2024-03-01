@@ -98,7 +98,7 @@ class LaneDetectionSystem:
 
         return inlier_cloud, outlier_cloud, inlier_attributes, outlier_attributes
 
-    def learn_intensity_threshold(self, attributes, percentage=0.10):
+    def learn_intensity_threshold(self, attributes, top_percentage=0.10):
         """
         Learns an intensity threshold based on the analysis of clusters.
         
@@ -129,7 +129,7 @@ class LaneDetectionSystem:
                             for label in cluster_intensity_sum}
         
         # # Determine threshold as the average of top N highest average intensities
-        N = max(1, int(round(len(mean_intensity) * percentage)))  # Use top 75% of clusters and cast to int
+        N = max(1, int(round(len(mean_intensity) * top_percentage)))  # Use top 75% of clusters and cast to int
         top_average_intensities = sorted(mean_intensity.values(), reverse=True)[:N]
         threshold = sum(top_average_intensities) / N
         
@@ -184,7 +184,7 @@ class LaneDetectionSystem:
             # Initialize the clusterer with n_clusters value and a random generator
             # seed of 10 for reproducibility.
             # take the nearest 2D points of max distance of 0.05 meters
-            kmeans = KMeans(n_clusters=k, random_state=10, n_init=10, max_iter=300)
+            kmeans = KMeans(n_clusters=k, random_state=0, n_init='auto', max_iter=300)
             cluster_labels = kmeans.fit_predict(xy_T)
             
             #  check also dbscan
@@ -252,11 +252,11 @@ class LaneDetectionSystem:
         # percentile of the intensity
         threshold = np.percentile(intensity_histogram, percentile)
         # find the peaks in the intensity histogram that are larger than the threshold
-        peaks_bin, _ = find_peaks(intensity_histogram, height=threshold, distance=lane_width/3)
+        peaks_bin, _ = find_peaks(intensity_histogram, height=threshold, distance=lane_width/1.25)
         num_lanes = max(min_num_peaks, len(peaks_bin))
         # convert back the y with peak intensity to the original scale
         y_peak_coordinates = y_bins[peaks_bin]
-        print(f"Number of lanes detected: {num_lanes} at y-coordinates: {y_peak_coordinates}")
+        # print(f"Number of lanes detected: {num_lanes} at y-coordinates: {y_peak_coordinates}")
         # # plot the intensity histogram with the peaks
         # plt.plot(y_bins[1:], intensity_histogram)
         # plt.plot(y_bins[peaks_bin], intensity_histogram[peaks_bin], "x")
@@ -311,7 +311,7 @@ class LaneDetectionSystem:
         # standard deviation of the slope
         std_slope = np.std(list(slopes.values()))
         # remove the slope that is too far from the mean
-        slopes = {label: slope for label, slope in slopes.items() if abs(slope - mean_slope) < 1.1 * std_slope}
+        slopes = {label: slope for label, slope in slopes.items() if abs(slope - mean_slope) <  std_slope}
         print(f"mean slope: {mean_slope}, std slope: {std_slope}, slopes Labels: {slopes} ")
         
         # Identify points to keep

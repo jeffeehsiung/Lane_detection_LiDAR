@@ -13,7 +13,7 @@ from DataPreprocessSystem import *
 from LaneDetectionSystem import *
 from LaneMarker import *
 from DataVisualizer import *
-from PolynomialRegression import *
+from PolynomialRegression_Parallel import *
 
 import warnings
 from numpy import RankWarning
@@ -68,13 +68,13 @@ if __name__ == "__main__":
         eps = best_params['eps']  # Use tuned eps value
         min_samples = best_params['min_samples']  # Use tuned min_samples value
         
-        # ground_pcd, non_ground_pcd, ground_attributes, non_ground_attributes= lane_detection_system.segment_ground_plane(pcd, attributes, distance_threshold=(eps*0.005), ransac_n=5, num_iterations=1000)
+        ground_pcd, non_ground_pcd, ground_attributes, non_ground_attributes= lane_detection_system.segment_ground_plane(pcd, attributes, distance_threshold=(eps*0.005), ransac_n=5, num_iterations=1000)
         
         # visualize the segmentation result
         # data_visualizer.visualize_lane_detection(pcd, non_ground_pcd)
         
-        # pcd = non_ground_pcd
-        # attributes = non_ground_attributes
+        pcd = non_ground_pcd
+        attributes = non_ground_attributes
         
         # Perform DBSCAN and update attributes
         best_labels = lane_detection_system.cluster_with_dbscan(pcd, eps, min_samples)
@@ -109,7 +109,7 @@ if __name__ == "__main__":
         # normalize the point cloud
         # filtered_pcd = data_preprocess_system.scaler_transform(filtered_pcd)
         # cluster the point cloud into lanes
-        num_slopes = lane_detection_system.optimize_k_means(filtered_pcd, min_n_cluster = (poly_degree), max_n_clusters = num_lanes * (poly_degree - 1), visualize=False)
+        num_slopes = lane_detection_system.optimize_k_means(filtered_pcd, min_n_cluster = (poly_degree), max_n_clusters = num_lanes * (poly_degree-1), visualize=False)
         # print(f"Number of lanes: {num_slopes}") 
         # cluster the point cloud into lanes using k-means
         kmeans = KMeans(n_clusters=num_slopes, random_state=10, n_init='auto', max_iter=300)
@@ -127,6 +127,7 @@ if __name__ == "__main__":
         # visualize the lane detection result
         # data_visualizer.visualize_lane_detection(pcd, filtered_pcd) 
         
+        # grid_dict = lane_marker.create_grid_dict(min_x, max_x)
         grid_dict = lane_marker.create_grid_dict(filtered_pcd, filtered_attributes, num_lanes = num_lanes, max_lane_width = 3.9, visualize=True)
         # # conver pointcloud to np.array
         filtered_pcd_array = np.asarray(filtered_pcd.points)
@@ -140,14 +141,13 @@ if __name__ == "__main__":
         data_repres_left = np.empty((0, n))
         data_repres_right = np.empty((0, n)) 
         
-        poly_regression = PolynomialRegression(degree=poly_degree) 
-        
         iteration = 0
         max_iter = 1000
         prev_error = float('inf')
         best_coeffs_pair_left = None
         best_coeffs_pair_right = None
-        
+        left_lane_coeffs = None
+        right_lane_coeffs = None
         
         while iteration <= max_iter:
             # Adjust the loop to iterate through grid_dict keys directly
@@ -157,14 +157,13 @@ if __name__ == "__main__":
                     # Use random sampling for data points in each grid cell
                     idx = np.random.randint(len(data_points), size=poly_degree)
                     selected_data_points = data_points[idx]
+
                     for point in selected_data_points:
                         if point[1] > 0:  # If the point's y coordinate is greater than y_center, it's on the left
                             data_repres_left = np.append(data_repres_left, [point], axis=0)
                         else:  # Otherwise, it's on the right
                             data_repres_right = np.append(data_repres_right, [point], axis=0)
-                else:
-                    continue
-            print(f"Number of points in left lane: {len(data_repres_left)}, Number of points in right lane: {len(data_repres_right)}")
+
             # The following processing is based on sorted x values for consistency
             # Preprocess Data: Sort based on x-coordinate
             data_repres_left = data_repres_left[data_repres_left[:, 0].argsort()]
@@ -177,27 +176,28 @@ if __name__ == "__main__":
                 y_right = data_repres_right[:, 1]
             else:
                 continue
-            # Polynomial Fitting with RANSAC
-            model_left = RANSACRegressor(poly_regression, 
-                                         min_samples = int(min(7, min_samples*0.65)), 
-                                         max_trials = 10000, 
-                                         random_state=0)
-            model_left.fit(X_left, y_left)
-            left_lane_coeffs = model_left.estimator_.get_params()["coeffs"]
 
-            model_right = RANSACRegressor(poly_regression,
-                                          min_samples = int(min(7, min_samples*0.65)),
-                                          max_trials = 10000,
-                                          random_state=0)
-            model_right.fit(X_right, y_right)
-            right_lane_coeffs = model_right.estimator_.get_params()["coeffs"] # corresponds to coefficients for order from highest to lowest
-            current_error = poly_regression.cost(left_lane_coeffs, right_lane_coeffs, np.linspace(min_x, max_x, 1000), parallelism_weight=100)
+            X_total = np.concatenate((data_repres_left[:, 0], data_repres_right[:, 0]), axis=0).reshape(-1, 1)
+            y_total = np.concatenate((data_repres_left[:, 1], data_repres_right[:, 1]), axis=0)
+            
+            PolynomialRegression_Parallel.set_static_variables(len(data_repres_left), len(data_repres_right))
+            
+            model_mix = RANSACRegressor(PolynomialRegression_Parallel(degree=poly_degree,left_coeffs=left_lane_coeffs, right_coeffs=right_lane_coeffs, random_state=0),
+                                            min_samples=(len(data_repres_left) + len(data_repres_right)),
+                                            max_trials=1000,
+                                            random_state=0)
+            model_mix.fit(X_total, y_total)
+            
+            left_lane_coeffs = model_mix.estimator_.get_params(deep=True)["left_coeffs"]
+            right_lane_coeffs = model_mix.estimator_.get_params(deep=True)["right_coeffs"]
                 
-            # Update best model based on error
+            current_error = model_mix.estimator_.score(X_total, y_total)
+                
             if current_error < prev_error:
                 prev_error = current_error
                 best_coeffs_pair_left = left_lane_coeffs
                 best_coeffs_pair_right = right_lane_coeffs
+            
                 
             iteration += 1
             print(f"Iteration: {iteration}, Error: {prev_error}")
@@ -207,7 +207,7 @@ if __name__ == "__main__":
         best_coeffs_pair = best_coeffs_pair.reshape(-1, 4)
         print(f"Best coefficients: {best_coeffs_pair}")
         # Ensure the output directory exists
-        output_dir = 'sample_output'
+        output_dir = 'sample_output_parallel'
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         # Save the coefficients to a text file

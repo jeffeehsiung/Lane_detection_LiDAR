@@ -11,9 +11,11 @@ warnings.simplefilter('ignore', RankWarning)
 
 
 class PolynomialRegression:
-    def __init__(self, degree=3, coeffs=None):
+    def __init__(self, degree=3, coeffs=None, costs=None):
         self.degree = degree
         self.coeffs = coeffs
+        # define self cost
+        self.costs = costs
 
     def fit(self, X, y):
         self.coeffs = np.polyfit(X.ravel(), y, self.degree)
@@ -30,6 +32,9 @@ class PolynomialRegression:
         return y_hat
 
     def score(self, X, y):
+        if self.costs is not None:
+            # cast the cost to float
+            return mean_squared_error(y, self.predict(X)) + float(self.costs)
         return mean_squared_error(y, self.predict(X))
     
     def cost(self, left_lane_coeffs, right_lane_coeffs, x_range, parallelism_weight=100):
@@ -66,22 +71,6 @@ class PolynomialRegression:
 
         # Calculate perpendicular distances for each x in x_range
         for x, y, dy_right, dy_left in zip(x_range, y_right, y_deriv_right, y_deriv_left):
-            # # Define the perpendicular line at (x, y) of the right lane
-            # perp_slope = -1 / dy_right if dy_right != 0 else np.inf
-            # y_intercept = y - perp_slope * x
-
-            # # Define a function for the intersection with the left lane
-            # def intersection_fun(x_intersect):
-            #     return perp_slope * x_intersect + y_intercept - poly_left(x_intersect)
-
-            # # Use fsolve to find the intersection point
-            # x_intersect = fsolve(intersection_fun, x)[0]
-
-            # # Calculate the perpendicular distance
-            # y_intersect = perp_slope * x_intersect + y_intercept
-            # dist = distance.euclidean([x_intersect, y_intersect], [x, y])
-            # interval_measured.append(dist)
-            
             # calculate the shortest distance(orthogonal distance) between the two lines
             dist = np.abs(poly_left(x) - poly_right(x)) / np.sqrt(1 + poly_left_deriv(x)**2)
             interval_measured.append(dist)
@@ -91,7 +80,7 @@ class PolynomialRegression:
             slope_differences.append(slope_difference)
 
         # True interval is assumed to be in between 3 to 3.75 meters, or 3
-        interval_truth = np.full_like(x_range, 3)
+        interval_truth = np.full_like(x_range, (3+3.75)/2)
         # Calculate MSE for intervals as the cost
         cost_intervals = mean_squared_error(interval_truth, interval_measured)
 
@@ -100,5 +89,8 @@ class PolynomialRegression:
     
         # Total cost combines interval cost and parallelism penalty
         total_cost = cost_intervals + parallelism_weight * parallelism_penalty
+        
+        # set the cost
+        self.costs = total_cost
         
         return total_cost
