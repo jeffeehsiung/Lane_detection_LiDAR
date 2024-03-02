@@ -1,12 +1,10 @@
 # data loading
-import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 
 # data preprocessing
 import open3d as o3d
+
 import os
-import time
 
 from sklearn.linear_model import RANSACRegressor
 from DataPreprocessSystem import *
@@ -19,6 +17,9 @@ import warnings
 from numpy import RankWarning
 warnings.simplefilter('ignore', RankWarning)
  
+import faulthandler
+faulthandler.enable()
+
 
 if __name__ == "__main__":
     # Example of using the system
@@ -30,7 +31,8 @@ if __name__ == "__main__":
     data_visualizer = DataVisualizer()
     
     poly_degree = 3
-
+    max_lane_width = 3.9
+    
     # Example of preprocessing a point cloud
     pointclouds_with_attributes = data_preprocess_system.load_pointclouds_with_attributes(folder_path)  # Assuming you're working with the first point cloud
 
@@ -91,7 +93,7 @@ if __name__ == "__main__":
         # calculate the delta of the points before and after filtering
         delta = len(np.asarray(pcd.points)) - len(filtered_points)
         
-        # print(f"Filtered {delta} points from {len(np.asarray(pcd.points))} to {len(filtered_points)}")
+        print(f"Filtered {delta} points from {len(np.asarray(pcd.points))} to {len(filtered_points)}")
         
         # Create a new point cloud object for filtered points, if needed
         filtered_pcd = o3d.geometry.PointCloud()
@@ -104,30 +106,30 @@ if __name__ == "__main__":
         # data_visualizer.visualize_lane_detection(pcd, filtered_pcd)
         # Replace the original pcd and attributes with the filtered ones
         pointclouds_with_attributes[i] = (filtered_pcd, filtered_attributes)
-        num_lanes, y_peaks_coordinates = lane_detection_system.find_number_of_lanes(filtered_pcd, filtered_attributes, percentile = 90, min_num_peaks=2)
+        num_lanes, y_peaks_coordinates = lane_detection_system.find_number_of_lanes(filtered_pcd, filtered_attributes, percentile=60, min_num_peaks=2, max_lane_width=max_lane_width, visualize=False)
+        print(f"Number of lanes: {num_lanes}")
         
-        # normalize the point cloud
-        # filtered_pcd = data_preprocess_system.scaler_transform(filtered_pcd)
-        # cluster the point cloud into lanes
-        num_slopes = lane_detection_system.optimize_k_means(filtered_pcd, min_n_cluster = (poly_degree), max_n_clusters = num_lanes * (poly_degree - 1), visualize=False)
-        # print(f"Number of lanes: {num_slopes}") 
+        # cluster the point cloud into lanes, each pair of lanes should have similar slope
+        num_slopes = lane_detection_system.optimize_k_means(filtered_pcd, min_n_cluster = (poly_degree), max_n_clusters = max(poly_degree, int(num_lanes * poly_degree / 1.5)), visualize=False)
+        print(f"Number of slopes: {num_slopes}")
         # cluster the point cloud into lanes using k-means
-        kmeans = KMeans(n_clusters=num_slopes, random_state=10, n_init='auto', max_iter=300)
+        kmeans = KMeans(n_clusters=num_slopes, random_state=0, n_init='auto', max_iter=300)
         cluster_labels = kmeans.fit_predict(np.asarray(filtered_pcd.points)[:, :2])
         
         # update the attributes signigying slope labels
         filtered_attributes = np.hstack((filtered_attributes, cluster_labels.reshape(-1, 1)))  # Append labels as a new column
         
         # calculate the slope of each slope cluster
-        slopes = lane_detection_system.calculate_slope(filtered_pcd, filtered_attributes, num_slopes)
-        
+        slopes_dict = lane_detection_system.calculate_slope(filtered_pcd, filtered_attributes, num_slopes)
+        print(f"Slopes: {slopes_dict}")
+
         # delete the point cloud and attributes with the slope orthogonal to the x-axis 
-        filtered_pcd, filtered_attributes = lane_detection_system.delete_orthogonal_slope(filtered_pcd, filtered_attributes, slopes)
+        filtered_pcd, filtered_attributes = lane_detection_system.delete_orthogonal_slope(filtered_pcd, filtered_attributes, slopes_dict)
         
         # visualize the lane detection result
         # data_visualizer.visualize_lane_detection(pcd, filtered_pcd) 
         
-        grid_dict = lane_marker.create_grid_dict(filtered_pcd, filtered_attributes, num_lanes = num_lanes, max_lane_width = 3.9, visualize=True)
+        grid_dict = lane_marker.create_grid_dict(filtered_pcd, filtered_attributes, slopes_dict, max_lane_width = max_lane_width, visualize=True)
         # # conver pointcloud to np.array
         filtered_pcd_array = np.asarray(filtered_pcd.points)
         min_x = np.floor(np.min(filtered_pcd_array[:, 0])).astype(int)
@@ -136,9 +138,6 @@ if __name__ == "__main__":
         
         # shape of lidar_data
         n = filtered_pcd_array.shape[1]
-        
-        data_repres_left = np.empty((0, n))
-        data_repres_right = np.empty((0, n)) 
         
         poly_regression = PolynomialRegression(degree=poly_degree) 
         
@@ -149,23 +148,50 @@ if __name__ == "__main__":
         best_coeffs_pair_right = None
         
         
+        # while iteration <= max_iter:
+        #     data_repres_left = np.empty((0, n))
+        #     data_repres_right = np.empty((0, n)) 
+        #     # Adjust the loop to iterate through grid_dict keys directly
+        #     for grid_cell_coord, data_points in data_in_grid.items():
+        #         y_offset, x = grid_cell_coord
+        #         if len(data_points) >= min_samples:
+        #             # Use random sampling for data points in each grid cell
+        #             idx = np.random.randint(len(data_points), size=poly_degree)
+        #             selected_data_points = data_points[idx]
+        #             for point in selected_data_points:
+        #                 if point[1] > y_offset:  # If the point's y coordinate is greater than y_center, it's on the left
+        #                     data_repres_left = np.append(data_repres_left, [point], axis=0)
+        #                 else:  # Otherwise, it's on the right
+        #                     data_repres_right = np.append(data_repres_right, [point], axis=0)
+        #         else:
+        #             continue
+
         while iteration <= max_iter:
+            data_repres_left = np.empty((0, n))
+            data_repres_right = np.empty((0, n))
             # Adjust the loop to iterate through grid_dict keys directly
             for grid_cell_coord, data_points in data_in_grid.items():
                 y_offset, x = grid_cell_coord
+                # Adjust y_offset for points around the origin
+                if -5 <= x <= 5:
+                    effective_y_offset = 0
+                else:
+                    effective_y_offset = y_offset
+
                 if len(data_points) >= min_samples:
                     # Use random sampling for data points in each grid cell
                     idx = np.random.randint(len(data_points), size=poly_degree)
                     selected_data_points = data_points[idx]
                     for point in selected_data_points:
-                        if point[1] > 0:  # If the point's y coordinate is greater than y_center, it's on the left
+                        # Compare point's y coordinate with effective_y_offset for lane separation
+                        if point[1] > effective_y_offset:  # If the point's y coordinate is greater than effective_y_offset, it's on the left
                             data_repres_left = np.append(data_repres_left, [point], axis=0)
                         else:  # Otherwise, it's on the right
                             data_repres_right = np.append(data_repres_right, [point], axis=0)
                 else:
                     continue
-            print(f"Number of points in left lane: {len(data_repres_left)}, Number of points in right lane: {len(data_repres_right)}")
-            # The following processing is based on sorted x values for consistency
+
+
             # Preprocess Data: Sort based on x-coordinate
             data_repres_left = data_repres_left[data_repres_left[:, 0].argsort()]
             data_repres_right = data_repres_right[data_repres_right[:, 0].argsort()]
@@ -200,8 +226,8 @@ if __name__ == "__main__":
                 best_coeffs_pair_right = right_lane_coeffs
                 
             iteration += 1
-            print(f"Iteration: {iteration}, Error: {prev_error}")
         
+        print(f"Iteration: {iteration}, Error: {prev_error}")
         best_coeffs_pair = np.concatenate((best_coeffs_pair_left, best_coeffs_pair_right))
         # Convert the best_coeffs_pair to a 2D array with 4 columns
         best_coeffs_pair = best_coeffs_pair.reshape(-1, 4)

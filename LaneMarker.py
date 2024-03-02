@@ -6,73 +6,22 @@ class LaneMarker:
     def __init__(self) -> None:
         pass
 
-    
-    def fit_lane_polynomials(self, lane_groups, reference_y=0):
-        """
-        Fits cubic polynomials to each lane and selects the lanes directly to the left and right of the reference point (y = 0).
-
-        Parameters:
-        - lane_groups: A dictionary containing lane points, where keys are (bin_index, lane_index) and values are numpy arrays of points.
-        - reference_y: The Y-coordinate of the reference point to determine the lanes to the left and right.
-
-        Returns:
-        - lane_fits: A dictionary with keys 'left' and 'right', containing the polynomial coefficients of the lanes directly to the left and right of the reference point.
-        """
-        closest_left_lane = None
-        closest_right_lane = None
-        
-        min_left_distance = float('inf')
-        min_right_distance = float('inf')
-        
-        lanes = {}
-        for (bin_index, lane_index), points in lane_groups.items():
-            if lane_index not in lanes:
-                lanes[lane_index] = points
-            else:
-                # Concatenate points from the same lane across different bins
-                lanes[lane_index] = np.vstack((lanes[lane_index], points))
-
-            
-        # find the left and right lanes based on the reference point
-        for lane_index, points in lanes.items():
-            avg_y = np.mean(points[:, 1]) # Average Y-coordinate of the lane
-            if avg_y < 0:  # Lane is to the left of y = 0
-                distance = abs(avg_y)
-                if distance < min_left_distance:
-                    min_left_distance = distance
-                    closest_left_lane = lane_index
-            elif avg_y > 0:  # Lane is to the right of y = 0
-                distance = abs(avg_y)
-                if distance < min_right_distance:
-                    min_right_distance = distance
-                    closest_right_lane = lane_index
-        
-        lane_fits = {'left': None, 'right': None}
-
-        # Fit the closest lane on each side, if any
-        if closest_left_lane:
-            coefs, residuals, _, _, _ = np.polyfit(lanes[closest_left_lane][:, 0], lanes[closest_left_lane][:, 1], 3, full=True)
-            lane_fits['left'] = {'coefs': coefs, 'residuals': residuals}
-
-        if closest_right_lane:
-            coefs, residuals, _, _, _ = np.polyfit(lanes[closest_right_lane][:, 0], lanes[closest_right_lane][:, 1], 3, full=True)
-            lane_fits['right'] = {'coefs': coefs, 'residuals': residuals}
-        return coefs, residuals
-    
-    
-    def create_grid_dict(self, pcd, attributes, num_lanes, max_lane_width=3.9, visualize=False):
+    def create_grid_dict(self, pcd, attributes, slopes_dict, max_lane_width=3.9, visualize=False):
         """
         Creates a grid dictionary for a given range of x-coordinates, considering the slope of each lane segment.
 
         Parameters:
         - pcd: Open3D point cloud object.
         - attributes: Attributes corresponding to each point in the point cloud.
-
+        - slopes_dict: A dictionary with the slope and intercept for each segment.
+        - max_lane_width: The maximum width of a lane.
+        - visualize: Whether to visualize the grid bounds.
+        
         Returns:
         - dict: A dictionary with grid coordinates as keys and adjusted grid bounds as values based on the slope.
         """
         grid_dict = {}
-
+        segment_dict = {}
         # Convert Open3D point cloud to NumPy array
         points = np.asarray(pcd.points)
         # sort the points and intensities based on the x-coordinate
@@ -82,56 +31,75 @@ class LaneMarker:
         
         # Calculate the range of x-coordinates
         min_x, max_x = points[:, 0].min(), points[:, 0].max()
-        step = 0.5
-        line_of_sight = 1 # The distance ahead of the vehicle to consider for the grid bounds
+        step = 1
+        line_of_sight = 5  # The distance ahead of the vehicle to consider for the grid bounds
         
-        # Initialize the dictionary to store slopes for each segment
-        slopes_dict = {}
-        # Based on the attributes slope labels, find for each label cluster the x range
+        # Process slopes_dict to exclude slopes outside certain conditions
+        mean_slope = np.mean([slope for _, (slope, _) in slopes_dict.items()])
+        std_slope = np.std([slope for _, (slope, _) in slopes_dict.items()])
+        # remove slopes that are outside of 90% of the probability distribution and are greater than 35 degrees: tan(35) = 0.7
+        z_score_threshold = 1.5
+        slopes_dict_copy = slopes_dict.copy()
+        slopes_dict = {segment: (slope, intercept) for segment, (slope, intercept) in slopes_dict.items() if mean_slope - z_score_threshold * std_slope < slope < mean_slope + z_score_threshold * std_slope and abs(slope) < 0.7}
+        print(f"Removed slopes: {[(segment, (slope, intercept)) for segment, (slope, intercept) in slopes_dict_copy.items() if mean_slope - z_score_threshold * std_slope > slope or slope > mean_slope + z_score_threshold * std_slope or abs(slope) > 0.7]}")
+        # # further remove segments in the slopes dictionary where intercept is outside of 80% of the probability distribution
+        # mean_intercept = np.mean([intercept for _, (_, intercept) in slopes_dict.items()])
+        # std_intercept = np.std([intercept for _, (_, intercept) in slopes_dict.items()])
+        # slopes_dict_copy = slopes_dict.copy()
+        # slopes_dict = {segment: (slope, intercept) for segment, (slope, intercept) in slopes_dict.items() if mean_intercept - z_score_threshold * std_intercept < intercept < mean_intercept + z_score_threshold * std_intercept}
+        # print(f"Removed intercepts: {[(segment, (slope, intercept)) for segment, (slope, intercept) in slopes_dict_copy.items() if mean_intercept - z_score_threshold * std_intercept > intercept or intercept > mean_intercept + z_score_threshold * std_intercept]}")
+    
+        # Define segments with their slopes and intercepts
         for label in np.unique(attributes[:, -1]):
-            # Filter points that belong to the current cluster
-            cluster_mask = attributes[:, -1] == label
-            cluster_points = points[cluster_mask]
-            # Calculate the range of x-coordinates for the current cluster
-            segment_start, segment_end = cluster_points[:, 0].min(), cluster_points[:, 0].max()
-            if len(cluster_points) > 1:
-                    # Calculate the slope for the current segment using linear regression (np.polyfit)
-                    x_values = cluster_points[:, 0]
-                    y_values = cluster_points[:, 1]
-                    slope, intercept = np.polyfit(x_values, y_values, 1)[:2]
-                    # Store the slope in the dictionary with the segment range as the key, and with the slope
-                    slopes_dict[(segment_start, segment_end)] = (slope, intercept)
-        # intercept mean
-        intercept_mean = np.mean([intercept for _, (_, intercept) in slopes_dict.items()])
+            if label in slopes_dict:
+                segment_slope, segment_intercept = slopes_dict[label]
+                cluster_mask = attributes[:, -1] == label
+                cluster_points = points[cluster_mask]
+                segment_start, segment_end = cluster_points[:, 0].min(), cluster_points[:, 0].max()
+                if len(cluster_points) > 1:
+                    segment_dict[(segment_start, segment_end)] = (segment_slope, segment_intercept)
+        
+        # Start defining grids
         x_current = min_x
+        previous_slope, previous_intercept = 0, 0
         while x_current < max_x:
-            # Determine the segment slope; find the slope and intercept entry that x_current falls into the range of the segment
-            for (segment_start, segment_end), (current_slope, intercept) in slopes_dict.items():
-                if segment_start <= x_current <= segment_end:
-                    break
-            else:
-                # If x_current is not within any segment, move to the next x-coordinate
-                x_current += step
-                continue
+            applicable_segments = [(start_end, s_i) for start_end, s_i in segment_dict.items() if start_end[0] <= x_current <= start_end[1]]
+            if not applicable_segments:  # No segment directly matches x_current
+                # Use average of previous and next segment's slope and intercept
+                try:
+                    next_segment = min([(start_end, s_i) for start_end, s_i in segment_dict.items() if start_end[0] > x_current], key=lambda x: x[0][0])
+                    segment_slope = (previous_slope + next_segment[1][0]) / 2
+                    segment_intercept = (previous_intercept + next_segment[1][1]) / 2
+                except ValueError:  # No next segment. Use the average of previous and mean slope and intercept
+                    segment_slope = (previous_slope + mean_slope) / 2
+                    segment_intercept = (previous_intercept)
             
-            # Calculate the y-offset based on the current slope and current x-coordinate segment
-            y_offset = current_slope * (x_current - segment_start) + intercept_mean
-            print(f"intercept {intercept_mean}, y_offset {y_offset}")
+            elif len(applicable_segments) > 1:  # Multiple segments match
+                # Choose segment with slope closest to previous segment's slope
+                segment_slope, segment_intercept = min(applicable_segments, key=lambda x: abs(x[1][0] - previous_slope))[1]
+            else:  # Exactly one segment matches
+                segment_slope, segment_intercept = applicable_segments[0][1]
             
-            # Define grid bounds taking into account the slope offset for y
-            grid_x_low_bound = (x_current - line_of_sight)
+            # Update previous slope and intercept for next iteration
+            previous_slope, previous_intercept = segment_slope, segment_intercept
+            
+            # Define grid bounds with slope consideration
+            lanes_vertical_bin_mean_y = segment_slope * x_current + segment_intercept
+            
+            grid_x_low_bound = x_current - line_of_sight
             grid_x_up_bound = x_current + line_of_sight
-            # grid_y_low_bound = -max_lane_width*1.25  + y_offset
-            # grid_y_up_bound = max_lane_width*1.25 + y_offset
-            grid_y_low_bound = - y_offset
-            grid_y_up_bound =  y_offset
-
-            # Store the grid bounds
-            grid_dict[(y_offset, x_current)] = [grid_x_up_bound, grid_x_low_bound, grid_y_up_bound, grid_y_low_bound]
-
-            # Move to the next segment
-            x_current += step
             
+            if np.negative(line_of_sight) <= x_current <= line_of_sight:
+                grid_y_low_bound = np.negative(max_lane_width)
+                grid_y_up_bound = max_lane_width
+            else:
+                grid_y_low_bound = min(np.negative(max_lane_width/2), lanes_vertical_bin_mean_y - max_lane_width)
+                grid_y_up_bound = max(max_lane_width/2, lanes_vertical_bin_mean_y + max_lane_width)
+                
+            grid_dict[(lanes_vertical_bin_mean_y, x_current)] = [grid_x_up_bound, grid_x_low_bound, grid_y_up_bound, grid_y_low_bound]
+            
+            x_current += step
+        
         # plot the points and on top of that plot the grid bounds
         if visualize:
             fig, ax = plt.subplots()

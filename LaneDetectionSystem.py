@@ -182,12 +182,10 @@ class LaneDetectionSystem:
         for k in range(min_n_cluster, max_n_clusters):
             
             # Initialize the clusterer with n_clusters value and a random generator
-            # seed of 10 for reproducibility.
-            # take the nearest 2D points of max distance of 0.05 meters
             kmeans = KMeans(n_clusters=k, random_state=0, n_init='auto', max_iter=300)
             cluster_labels = kmeans.fit_predict(xy_T)
             
-            #  check also dbscan
+            #  check also dbscan 
             # db = DBSCAN(eps=(k*(0.01)), min_samples= 10).fit(xy_T)
             # labels = db.labels_
             
@@ -212,18 +210,22 @@ class LaneDetectionSystem:
                 # set titile same as the column name
                 ax.set_title(df.columns[i])
             plt.show()
-            
-        # choose the number of clusters with the highest silhouette score
-        num_cluster = np.argmax(silhouette_score_buffer) + min_n_cluster
         
         # # Use the 'kneed' library to identify the elbow point automatically
         # kn = KneeLocator(range(min_n_cluster, max_n_clusters), distortions, curve='convex', direction='decreasing')
         # num_cluster = kn.knee
+            
+        # choose the number of clusters with the highest silhouette score
         
-        return num_cluster
-    
+        # if silhouette_score_buffer is empty, then return the minimum number of clusters
+        if len(silhouette_score_buffer) == 0:
+            return min_n_cluster
+        else:
+            return np.argmax(silhouette_score_buffer) + min_n_cluster
 
-    def find_number_of_lanes(self, pointcloud, attributes, percentile=90, min_num_peaks=2):
+        
+
+    def find_number_of_lanes(self, pointcloud, attributes, percentile=90, min_num_peaks=2, max_lane_width = 3.9, visualize=False):
         """
         Find the number of lanes based on the number of intensity peaks.
         - pointcloud: Open3D pointcloud object
@@ -242,27 +244,28 @@ class LaneDetectionSystem:
         min_y, max_y = np.min(y), np.max(y)
         
         # pick the y bins that has the maximum intensity
-        lane_width = 3.75
         max_num_lanes = 6
-        max_two_way_width = lane_width * max_num_lanes * 2
+        max_two_way_width = max_lane_width * max_num_lanes * 2
         
         # define number of y bins based on the maximum two way width
         y_bins = np.linspace(min_y, max_y, int(max_two_way_width))
         intensity_histogram, _ = np.histogram(y, bins=y_bins, weights=intensities)
         # percentile of the intensity
         threshold = np.percentile(intensity_histogram, percentile)
+        
         # find the peaks in the intensity histogram that are larger than the threshold
-        peaks_bin, _ = find_peaks(intensity_histogram, height=threshold, distance=lane_width/1.25)
+        peaks_bin, _ = find_peaks(intensity_histogram, height=threshold, distance=max_lane_width/2)
         num_lanes = max(min_num_peaks, len(peaks_bin))
         # convert back the y with peak intensity to the original scale
         y_peak_coordinates = y_bins[peaks_bin]
-        # print(f"Number of lanes detected: {num_lanes} at y-coordinates: {y_peak_coordinates}")
-        # # plot the intensity histogram with the peaks
-        # plt.plot(y_bins[1:], intensity_histogram)
-        # plt.plot(y_bins[peaks_bin], intensity_histogram[peaks_bin], "x")
-        # plt.xlabel('y-coordinate')
-        # plt.ylabel('intensity')
-        # plt.show()
+
+        if visualize:
+            # plot the intensity histogram with the peaks
+            plt.plot(y_bins[1:], intensity_histogram)
+            plt.plot(y_bins[peaks_bin], intensity_histogram[peaks_bin], "x")
+            plt.xlabel('y-coordinate')
+            plt.ylabel('intensity')
+            plt.show()
         
         return num_lanes, y_peak_coordinates
     
@@ -289,30 +292,34 @@ class LaneDetectionSystem:
             x, y = cluster_points[:, 0], cluster_points[:, 1]
             coefs = np.polyfit(x, y, 1)
             slope = coefs[0]
-            slopes[cluster_label] = slope
+            intercept = coefs[1]
+            # the slope represents the slope of this cluster line and the intercept represents the y-intercept where the fitted line crosses the y-axis
+            slopes[cluster_label] = (slope, intercept)
         return slopes
 
-    def delete_orthogonal_slope(self, pcd, attributes, slopes):
+    def delete_orthogonal_slope(self, pcd, attributes, slopes_dict):
         """
         Deletes points and corresponding attributes where the slope is almost orthogonal to the x-axis.
 
         Parameters:
         - pcd: The Open3D point cloud object.
         - attributes: Attributes corresponding to each point in the point cloud.
-        - slopes: A dictionary where keys are cluster labels and values are the slope of the cluster.
+        - slopes: A dictionary where keys are cluster labels and values are the slope and intercept of the cluster.
         - orthogonal_threshold: The threshold angle (in degrees) to consider a slope as nearly orthogonal.
 
         Returns:
         - filtered_pcd: The filtered Open3D point cloud object.
         - filtered_attributes: Filtered attributes corresponding to the filtered point cloud.
         """
-        # mean slope
-        mean_slope = np.mean(list(slopes.values()))
-        # standard deviation of the slope
-        std_slope = np.std(list(slopes.values()))
-        # remove the slope that is too far from the mean
-        slopes = {label: slope for label, slope in slopes.items() if abs(slope - mean_slope) <  std_slope}
-        print(f"mean slope: {mean_slope}, std slope: {std_slope}, slopes Labels: {slopes} ")
+        # calculate the slope of each cluster given the slope dictionary with the slope and intercept
+        slopes = {label: slope for label, (slope, _) in slopes_dict.items()}
+        # calculate the mean and standard deviation of the slopes
+        slope_mean = np.mean(list(slopes.values()))
+        slope_std = np.std(list(slopes.values()))
+        # remove the slope that is outside of 90% of the probability distribution and the slope where its relative yaw angle is greater than 45 degress: tan(45) = 1
+        slopes = {label: slope for label, slope in slopes.items() if abs(slope - slope_mean) < 1.645 * slope_std and abs(slope) < 1}
+        
+        print(f"mean slope: {slope_mean}, std slope: {slope_std}, delta number of slopes: {len(slopes_dict) - len(slopes)}")
         
         # Identify points to keep
         keep_indices = []
@@ -351,83 +358,6 @@ class LaneDetectionSystem:
         sorted_pcd.points = o3d.utility.Vector3dVector(sorted_points)
 
         return sorted_pcd, sorted_attributes
-
-    def segregate_points_based_on_lanes(self, filtered_points, filtered_attributes, y_peak_coordinates, threshold_intensity, num_bins=100):
-        """
-        Improved segregation of points based on lanes by analyzing each X-coordinate bin for lane detection
-        based on Y-coordinates and intensity.
-
-        Parameters:
-        - filtered_points: open3D pointcloud object
-        - filtered_attributes: attributes corresponding to filtered_points, including intensity.
-        - y_peak_coordinates: Y-coordinates representing the peak locations of lanes.
-        - threshold_intensity: Intensity threshold to consider a point as part of a lane.
-        - num_bins: Number of bins to divide the X-coordinate range into.
-
-        Returns:
-        - lane_groups: A dictionary where keys are tuples (bin_index, lane_index) and values are numpy arrays of points assigned to a lane.
-        """
-        # Initialize the result dictionary
-        lane_groups = {}
-        # to np.array
-        filtered_points = np.asarray(filtered_points.points)
-        filtered_attributes = np.asarray(filtered_attributes)
-        # Extract X, Y coordinates and intensity from filtered points and attributes
-        X, Y = filtered_points[:, 0], filtered_points[:, 1]
-        intensity = filtered_attributes[:, 1]  # Assuming intensity is at index 1
-
-        # Define bins for X-coordinate
-        x_min, x_max = np.min(X), np.max(X)
-        bins = np.linspace(x_min, x_max, num_bins + 1)
-
-        # Bin points based on X-coordinate
-        bin_indices = np.digitize(X, bins) - 1  # Adjusting indices to be 0-based
-
-        # Analyze points in each bin
-        for bin_index in range(num_bins):
-            # Select points and attributes in current bin
-            in_bin_mask = bin_indices == bin_index
-            points_in_bin = filtered_points[in_bin_mask]
-            intensity_in_bin = intensity[in_bin_mask]
-            
-            lane_width = 3.9  # Assuming a constant lane width
-            # Skip empty bins
-            if points_in_bin.size == 0:
-                continue
-            
-            # in the y_peak_coordinates, if two peaks are at proximity of each other, then they are the same lane, combine them by calculating the average
-            y_peak_coordinates = np.sort(np.array(y_peak_coordinates))
-            
-            # merge_close_peaks
-            i = 0
-            # Iterate over the peaks; since the list might change size, use a while loop
-            while i < len(y_peak_coordinates) - 1:
-                # Check if the next peak is within lane_width/3 of the current peak
-                if y_peak_coordinates[i + 1] - y_peak_coordinates[i] <= lane_width / 3:
-                    # Average the current peak and the next one
-                    avg_peak = np.mean([y_peak_coordinates[i], y_peak_coordinates[i + 1]])
-                    # Replace the two peaks with their average
-                    y_peak_coordinates = np.delete(y_peak_coordinates, [i, i + 1])
-                    y_peak_coordinates = np.insert(y_peak_coordinates, i, avg_peak)
-                    # No need to increment i, as we want to check the next set of peaks against the newly formed average
-                else:
-                    # Only increment if no merge was done, to move to the next peak
-                    i += 1
-            
-            # Assign points to lanes based on Y-coordinates and intensity
-            for lane_index, y_peak in enumerate(y_peak_coordinates):
-                # Define lane boundaries based on peak Y-coordinate
-                y_min, y_max = y_peak - lane_width/2, y_peak + lane_width/2
-
-                # Identify points within the lane boundaries and above intensity threshold
-                lane_mask = (points_in_bin[:, 1] >= y_min) & (points_in_bin[:, 1] <= y_max) & (intensity_in_bin > threshold_intensity)
-                points_in_lane = points_in_bin[lane_mask]
-                    
-                # Update lane groups if any points are identified
-                if points_in_lane.size > 0:
-                    lane_groups[(bin_index, lane_index)] = points_in_lane
-
-        return lane_groups
                 
     def points_to_img(self, pcd_with_attributes, img_size=(1000, 1000), point_size=1):
         '''
