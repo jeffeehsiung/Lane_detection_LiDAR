@@ -254,7 +254,7 @@ class LaneDetectionSystem:
         threshold = np.percentile(intensity_histogram, percentile)
         
         # find the peaks in the intensity histogram that are larger than the threshold
-        peaks_bin, _ = find_peaks(intensity_histogram, height=threshold, distance=max_lane_width/2)
+        peaks_bin, _ = find_peaks(intensity_histogram, height=threshold, distance=max_lane_width/1.3)
         num_lanes = max(min_num_peaks, len(peaks_bin))
         # convert back the y with peak intensity to the original scale
         y_peak_coordinates = y_bins[peaks_bin]

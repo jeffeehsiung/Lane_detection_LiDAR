@@ -70,13 +70,13 @@ if __name__ == "__main__":
         eps = best_params['eps']  # Use tuned eps value
         min_samples = best_params['min_samples']  # Use tuned min_samples value
         
-        # ground_pcd, non_ground_pcd, ground_attributes, non_ground_attributes= lane_detection_system.segment_ground_plane(pcd, attributes, distance_threshold=(eps*0.005), ransac_n=5, num_iterations=1000)
+        ground_pcd, non_ground_pcd, ground_attributes, non_ground_attributes= lane_detection_system.segment_ground_plane(pcd, attributes, distance_threshold=(eps*0.005), ransac_n=5, num_iterations=1000)
         
         # visualize the segmentation result
         # data_visualizer.visualize_lane_detection(pcd, non_ground_pcd)
         
-        # pcd = non_ground_pcd
-        # attributes = non_ground_attributes
+        pcd = non_ground_pcd
+        attributes = non_ground_attributes
         
         # Perform DBSCAN and update attributes
         best_labels = lane_detection_system.cluster_with_dbscan(pcd, eps, min_samples)
@@ -110,7 +110,7 @@ if __name__ == "__main__":
         print(f"Number of lanes: {num_lanes}")
         
         # cluster the point cloud into lanes, each pair of lanes should have similar slope
-        num_slopes = lane_detection_system.optimize_k_means(filtered_pcd, min_n_cluster = (poly_degree), max_n_clusters = max(poly_degree, int(num_lanes * poly_degree / 1.5)), visualize=False)
+        num_slopes = lane_detection_system.optimize_k_means(filtered_pcd, min_n_cluster = (poly_degree), max_n_clusters = max(poly_degree, int(num_lanes * poly_degree / 2)), visualize=False)
         print(f"Number of slopes: {num_slopes}")
         # cluster the point cloud into lanes using k-means
         kmeans = KMeans(n_clusters=num_slopes, random_state=0, n_init='auto', max_iter=300)
@@ -129,7 +129,7 @@ if __name__ == "__main__":
         # visualize the lane detection result
         # data_visualizer.visualize_lane_detection(pcd, filtered_pcd) 
         
-        grid_dict = lane_marker.create_grid_dict(filtered_pcd, filtered_attributes, slopes_dict, max_lane_width = max_lane_width, visualize=True)
+        grid_dict = lane_marker.create_grid_dict(filtered_pcd, filtered_attributes, slopes_dict, max_lane_width = max_lane_width, num_lanes = num_lanes, visualize=False)
         # # conver pointcloud to np.array
         filtered_pcd_array = np.asarray(filtered_pcd.points)
         min_x = np.floor(np.min(filtered_pcd_array[:, 0])).astype(int)
@@ -146,25 +146,6 @@ if __name__ == "__main__":
         prev_error = float('inf')
         best_coeffs_pair_left = None
         best_coeffs_pair_right = None
-        
-        
-        # while iteration <= max_iter:
-        #     data_repres_left = np.empty((0, n))
-        #     data_repres_right = np.empty((0, n)) 
-        #     # Adjust the loop to iterate through grid_dict keys directly
-        #     for grid_cell_coord, data_points in data_in_grid.items():
-        #         y_offset, x = grid_cell_coord
-        #         if len(data_points) >= min_samples:
-        #             # Use random sampling for data points in each grid cell
-        #             idx = np.random.randint(len(data_points), size=poly_degree)
-        #             selected_data_points = data_points[idx]
-        #             for point in selected_data_points:
-        #                 if point[1] > y_offset:  # If the point's y coordinate is greater than y_center, it's on the left
-        #                     data_repres_left = np.append(data_repres_left, [point], axis=0)
-        #                 else:  # Otherwise, it's on the right
-        #                     data_repres_right = np.append(data_repres_right, [point], axis=0)
-        #         else:
-        #             continue
 
         while iteration <= max_iter:
             data_repres_left = np.empty((0, n))
@@ -241,7 +222,4 @@ if __name__ == "__main__":
         # save both left and right lane coefficients as two rows in the text file
         np.savetxt(os.path.join(output_dir, lidar_txt_name), best_coeffs_pair, delimiter=';', fmt='%.15e')        
         
-        # # fh = open(f'scene{i}', 'bw')
-        # # # save the point cloud to file as float32
-        # # np.asarray(filtered_pcd.points).astype('float32').tofile(fh)
     

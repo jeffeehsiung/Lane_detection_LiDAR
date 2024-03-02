@@ -6,7 +6,7 @@ class LaneMarker:
     def __init__(self) -> None:
         pass
 
-    def create_grid_dict(self, pcd, attributes, slopes_dict, max_lane_width=3.9, visualize=False):
+    def create_grid_dict(self, pcd, attributes, slopes_dict, max_lane_width=3.9, num_lanes = 2, visualize=False):
         """
         Creates a grid dictionary for a given range of x-coordinates, considering the slope of each lane segment.
 
@@ -32,22 +32,22 @@ class LaneMarker:
         # Calculate the range of x-coordinates
         min_x, max_x = points[:, 0].min(), points[:, 0].max()
         step = 1
-        line_of_sight = 5  # The distance ahead of the vehicle to consider for the grid bounds
+        line_of_sight = 10  # The distance ahead of the vehicle to consider for the grid bounds
         
         # Process slopes_dict to exclude slopes outside certain conditions
         mean_slope = np.mean([slope for _, (slope, _) in slopes_dict.items()])
         std_slope = np.std([slope for _, (slope, _) in slopes_dict.items()])
-        # remove slopes that are outside of 90% of the probability distribution and are greater than 35 degrees: tan(35) = 0.7
-        z_score_threshold = 1.5
+        mean_intercept = np.mean([intercept for _, (_, intercept) in slopes_dict.items()])
+        std_intercept = np.std([intercept for _, (_, intercept) in slopes_dict.items()])
+        # remove slopes that are outside of the probability distribution and are greater than 35 degrees: tan(35) = 0.7
+        z_score_threshold = 1.645 # 80% of the probability distribution
         slopes_dict_copy = slopes_dict.copy()
+        
         slopes_dict = {segment: (slope, intercept) for segment, (slope, intercept) in slopes_dict.items() if mean_slope - z_score_threshold * std_slope < slope < mean_slope + z_score_threshold * std_slope and abs(slope) < 0.7}
         print(f"Removed slopes: {[(segment, (slope, intercept)) for segment, (slope, intercept) in slopes_dict_copy.items() if mean_slope - z_score_threshold * std_slope > slope or slope > mean_slope + z_score_threshold * std_slope or abs(slope) > 0.7]}")
         # # further remove segments in the slopes dictionary where intercept is outside of 80% of the probability distribution
-        # mean_intercept = np.mean([intercept for _, (_, intercept) in slopes_dict.items()])
-        # std_intercept = np.std([intercept for _, (_, intercept) in slopes_dict.items()])
-        # slopes_dict_copy = slopes_dict.copy()
-        # slopes_dict = {segment: (slope, intercept) for segment, (slope, intercept) in slopes_dict.items() if mean_intercept - z_score_threshold * std_intercept < intercept < mean_intercept + z_score_threshold * std_intercept}
-        # print(f"Removed intercepts: {[(segment, (slope, intercept)) for segment, (slope, intercept) in slopes_dict_copy.items() if mean_intercept - z_score_threshold * std_intercept > intercept or intercept > mean_intercept + z_score_threshold * std_intercept]}")
+        slopes_dict = {segment: (slope, intercept) for segment, (slope, intercept) in slopes_dict.items() if mean_intercept - z_score_threshold * std_intercept < intercept < mean_intercept + z_score_threshold * std_intercept}
+        print(f"Removed intercepts: {[(segment, (slope, intercept)) for segment, (slope, intercept) in slopes_dict_copy.items() if mean_intercept - z_score_threshold * std_intercept > intercept or intercept > mean_intercept + z_score_threshold * std_intercept]}")
     
         # Define segments with their slopes and intercepts
         for label in np.unique(attributes[:, -1]):
@@ -63,8 +63,11 @@ class LaneMarker:
         x_current = min_x
         previous_slope, previous_intercept = 0, 0
         while x_current < max_x:
-            applicable_segments = [(start_end, s_i) for start_end, s_i in segment_dict.items() if start_end[0] <= x_current <= start_end[1]]
-            if not applicable_segments:  # No segment directly matches x_current
+            applicable_segments = [(start_end, s_i) for start_end, s_i in segment_dict.items() if start_end[0] <= x_current <= start_end[1]]        
+            if np.negative(line_of_sight) <= x_current <= line_of_sight:
+                segment_slope = mean_slope
+                segment_intercept = 0
+            elif not applicable_segments:  # No segment directly matches x_current
                 # Use average of previous and next segment's slope and intercept
                 try:
                     next_segment = min([(start_end, s_i) for start_end, s_i in segment_dict.items() if start_end[0] > x_current], key=lambda x: x[0][0])
@@ -72,7 +75,7 @@ class LaneMarker:
                     segment_intercept = (previous_intercept + next_segment[1][1]) / 2
                 except ValueError:  # No next segment. Use the average of previous and mean slope and intercept
                     segment_slope = (previous_slope + mean_slope) / 2
-                    segment_intercept = (previous_intercept)
+                    segment_intercept = (previous_intercept + mean_intercept) / 2
             
             elif len(applicable_segments) > 1:  # Multiple segments match
                 # Choose segment with slope closest to previous segment's slope
@@ -84,32 +87,32 @@ class LaneMarker:
             previous_slope, previous_intercept = segment_slope, segment_intercept
             
             # Define grid bounds with slope consideration
-            lanes_vertical_bin_mean_y = segment_slope * x_current + segment_intercept
+            lanes_vertical_bin_mean_y = segment_slope * (x_current) + (segment_intercept/num_lanes)
+            # mediate with the center of the lane
+            lanes_vertical_bin_mean_y = (lanes_vertical_bin_mean_y) / 2
             
             grid_x_low_bound = x_current - line_of_sight
             grid_x_up_bound = x_current + line_of_sight
-            
-            if np.negative(line_of_sight) <= x_current <= line_of_sight:
-                grid_y_low_bound = np.negative(max_lane_width)
-                grid_y_up_bound = max_lane_width
-            else:
-                grid_y_low_bound = min(np.negative(max_lane_width/2), lanes_vertical_bin_mean_y - max_lane_width)
-                grid_y_up_bound = max(max_lane_width/2, lanes_vertical_bin_mean_y + max_lane_width)
+            grid_y_low_bound = min(np.negative(max_lane_width), lanes_vertical_bin_mean_y - max_lane_width)
+            grid_y_up_bound = max(max_lane_width, lanes_vertical_bin_mean_y + max_lane_width)
                 
             grid_dict[(lanes_vertical_bin_mean_y, x_current)] = [grid_x_up_bound, grid_x_low_bound, grid_y_up_bound, grid_y_low_bound]
             
             x_current += step
         
-        # plot the points and on top of that plot the grid bounds
+        # plot the points and on top of that plot the grid bounds and mark the lanes_vertical_bin_mean_y and x for each grid
         if visualize:
             fig, ax = plt.subplots()
             ax.scatter(points[:, 0], points[:, 1], c='b', label='Point Cloud')
-            for grid_bounds in grid_dict.values():
+            for grid_coord, grid_bounds in grid_dict.items():
                 x_up, x_low, y_up, y_low = grid_bounds
                 ax.plot([x_low, x_up], [y_up, y_up], c='r')
                 ax.plot([x_up, x_up], [y_up, y_low], c='r')
                 ax.plot([x_up, x_low], [y_low, y_low], c='r')
                 ax.plot([x_low, x_low], [y_low, y_up], c='r')
+                lanes_vertical_bin_mean_y, x = grid_coord
+                ax.scatter(x, lanes_vertical_bin_mean_y, c='g')
+                ax.text(x, lanes_vertical_bin_mean_y, f'{x:.2f}, {lanes_vertical_bin_mean_y:.2f}', fontsize=8)
             ax.set_xlabel('X')
             ax.set_ylabel('Y')
             ax.set_title('Grid Bounds')
