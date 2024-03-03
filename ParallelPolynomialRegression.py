@@ -36,13 +36,15 @@ class ParallelPolynomialRegression:
         # if any of the sahpes are empty, print a warning
         if len(X_left) == 0 or len(X_right) == 0:
             print("Warning: One of the lanes has no data")
-        
+            return
+     
         iteration = 0
         max_iterations = 100
         lucky_number = 7
         prev_error = float('inf')
-        left_lane_coeffs = None
-        right_lane_coeffs = None
+        # Initialize coefficients to a default value if fitting cannot be performed
+        left_lane_coeffs = np.zeros(self.degree + 1)
+        right_lane_coeffs = np.zeros(self.degree + 1)
         
         poly_regression = PolynomialRegression(self.degree)
 
@@ -132,7 +134,7 @@ class ParallelPolynomialRegression:
         
         return total_cost
     
-    def cost(self, x_range, parallelism_weight=100):
+    def cost(self,x_range, parallelism_weight=100):
         """
         Calculate the cost by considering both the mean squared error between the true lane width
         and the measured lane width across a range of x-values, and the difference in slopes
@@ -145,6 +147,9 @@ class ParallelPolynomialRegression:
         Returns:
         - float: The total cost.
         """
+        if self.left_coeffs is None or self.right_coeffs is None:
+            return float('inf')  # Return a high cost to indicate an invalid state
+        
         # Define polynomial functions for the left and right lanes
         poly_left = np.poly1d(self.left_coeffs)
         poly_right = np.poly1d(self.right_coeffs)
