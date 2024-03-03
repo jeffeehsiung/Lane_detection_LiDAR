@@ -32,9 +32,6 @@ class PolynomialRegression:
         return y_hat
 
     def score(self, X, y):
-        if self.costs is not None:
-            # cast the cost to float
-            return mean_squared_error(y, self.predict(X)) + float(self.costs)
         return mean_squared_error(y, self.predict(X))
     
     def cost(self, left_lane_coeffs, right_lane_coeffs, x_range, parallelism_weight=100):

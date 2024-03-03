@@ -12,6 +12,7 @@ from LaneDetectionSystem import *
 from LaneMarker import *
 from DataVisualizer import *
 from PolynomialRegression import *
+from ParallelPolynomialRegression import *
 
 import warnings
 from numpy import RankWarning
@@ -136,17 +137,28 @@ if __name__ == "__main__":
         max_x = np.ceil(np.max(filtered_pcd_array[:, 0])).astype(int) 
         data_in_grid = lane_marker.filter_lidar_data_by_grid(filtered_pcd_array, grid_dict)
         
+        qty_threshold = len(filtered_pcd_array) / len(data_in_grid)
+        
         # shape of lidar_data
         n = filtered_pcd_array.shape[1]
         
         poly_regression = PolynomialRegression(degree=poly_degree) 
         
         iteration = 0
-        max_iter = 1000
+        max_iter = 10
+        lucky_number = 7
         prev_error = float('inf')
         best_coeffs_pair_left = None
         best_coeffs_pair_right = None
-
+        # for parallel polynomial regression
+        current_error = prev_error
+        left_lane_coeffs = None
+        right_lane_coeffs = None
+        
+        data_in_grid_len = len(data_in_grid) 
+        total_scatters_in_grid = np.sum([len(data_points) for data_points in data_in_grid.values()])
+        qty_threshold = (total_scatters_in_grid/data_in_grid_len)
+        
         while iteration <= max_iter:
             data_repres_left = np.empty((0, n))
             data_repres_right = np.empty((0, n))
@@ -159,9 +171,9 @@ if __name__ == "__main__":
                 else:
                     effective_y_offset = y_offset
 
-                if len(data_points) >= min_samples:
+                if len(data_points) >=  min(qty_threshold, 2 * min_samples):
                     # Use random sampling for data points in each grid cell
-                    idx = np.random.randint(len(data_points), size=poly_degree)
+                    idx = np.random.randint(len(data_points), size = int(min(qty_threshold, 2 * min_samples)))
                     selected_data_points = data_points[idx]
                     for point in selected_data_points:
                         # Compare point's y coordinate with effective_y_offset for lane separation
@@ -176,30 +188,49 @@ if __name__ == "__main__":
             # Preprocess Data: Sort based on x-coordinate
             data_repres_left = data_repres_left[data_repres_left[:, 0].argsort()]
             data_repres_right = data_repres_right[data_repres_right[:, 0].argsort()]
+            print(f"Left lane data: {len(data_repres_left)}, Right lane data: {len(data_repres_right)}")
             # Ensure enough points for fitting
-            if len(data_repres_left) >= poly_degree + 1 and len(data_repres_right) >= poly_degree + 1:
+            # if len(data_repres_left) >= poly_degree + 1 and len(data_repres_right) >= poly_degree + 1:
+            if (len(data_repres_left) >= max(lucky_number, min_samples)) and (len(data_repres_right) >= max(lucky_number, min_samples)):
                 X_left = data_repres_left[:, 0].reshape(-1, 1)
                 y_left = data_repres_left[:, 1]
                 X_right = data_repres_right[:, 0].reshape(-1, 1)
                 y_right = data_repres_right[:, 1]
+                X_total = np.concatenate((data_repres_left[:, 0], data_repres_right[:, 0]), axis=0).reshape(-1, 1)
+                y_total = np.concatenate((data_repres_left[:, 1], data_repres_right[:, 1]), axis=0)
+
             else:
                 continue
-            # Polynomial Fitting with RANSAC
-            model_left = RANSACRegressor(poly_regression, 
-                                         min_samples = int(min(7, min_samples*0.65)), 
-                                         max_trials = 10000, 
-                                         random_state=0)
-            model_left.fit(X_left, y_left)
-            left_lane_coeffs = model_left.estimator_.get_params()["coeffs"]
-
-            model_right = RANSACRegressor(poly_regression,
-                                          min_samples = int(min(7, min_samples*0.65)),
-                                          max_trials = 10000,
-                                          random_state=0)
-            model_right.fit(X_right, y_right)
-            right_lane_coeffs = model_right.estimator_.get_params()["coeffs"] # corresponds to coefficients for order from highest to lowest
-            current_error = poly_regression.cost(left_lane_coeffs, right_lane_coeffs, np.linspace(min_x, max_x, 1000), parallelism_weight=100)
+            
+            # for parallel polynomial regression
+            ParallelPolynomialRegression.set_static_variables(len(data_repres_left), len(data_repres_right), lane_min_samples = min(lucky_number,min_samples))
                 
+            model_mix = RANSACRegressor(ParallelPolynomialRegression(degree=poly_degree,left_coeffs=left_lane_coeffs, right_coeffs=right_lane_coeffs, random_state=0),
+                                            min_samples=((len(data_repres_left) + len(data_repres_right))),
+                                            max_trials=10,
+                                            random_state=0)
+            model_mix.fit(X_total, y_total)
+                
+            left_lane_coeffs = model_mix.estimator_.get_params(deep=True)["left_coeffs"]
+            right_lane_coeffs = model_mix.estimator_.get_params(deep=True)["right_coeffs"]
+                
+            current_error = model_mix.estimator_.score(X_total, y_total)
+            # Polynomial Fitting with RANSAC
+            # model_left = RANSACRegressor(poly_regression, 
+            #                              min_samples = int(min(7, min_samples*0.65)), 
+            #                              max_trials = 10000, 
+            #                              random_state=0)
+            # model_left.fit(X_left, y_left)
+            # left_lane_coeffs = model_left.estimator_.get_params()["coeffs"]
+
+            # model_right = RANSACRegressor(poly_regression,
+            #                               min_samples = int(min(7, min_samples*0.65)),
+            #                               max_trials = 10000,
+            #                               random_state=0)
+            # model_right.fit(X_right, y_right)
+            # right_lane_coeffs = model_right.estimator_.get_params()["coeffs"] # corresponds to coefficients for order from highest to lowest
+            # current_error = poly_regression.cost(left_lane_coeffs, right_lane_coeffs, np.linspace(min_x, max_x, 1000), parallelism_weight=100)
+            print(f"Iteration: {iteration}, Error: {current_error}")
             # Update best model based on error
             if current_error < prev_error:
                 prev_error = current_error
@@ -214,7 +245,7 @@ if __name__ == "__main__":
         best_coeffs_pair = best_coeffs_pair.reshape(-1, 4)
         print(f"Best coefficients: {best_coeffs_pair}")
         # Ensure the output directory exists
-        output_dir = 'sample_output'
+        output_dir = 'sample_output_final'
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         # Save the coefficients to a text file
