@@ -49,6 +49,8 @@ class PolynomialRegression:
         Returns:
         - float: The total cost.
         """
+        if left_lane_coeffs is None or right_lane_coeffs is None:
+            return float('inf')  # Return a high cost to indicate an invalid state
         # Define polynomial functions for the left and right lanes
         poly_left = np.poly1d(left_lane_coeffs)
         poly_right = np.poly1d(right_lane_coeffs)

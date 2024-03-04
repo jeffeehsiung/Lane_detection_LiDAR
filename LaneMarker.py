@@ -93,8 +93,8 @@ class LaneMarker:
             
             grid_x_low_bound = x_current - line_of_sight
             grid_x_up_bound = x_current + line_of_sight
-            grid_y_low_bound = min(np.negative(max_lane_width), lanes_vertical_bin_mean_y - max_lane_width)
-            grid_y_up_bound = max(max_lane_width, lanes_vertical_bin_mean_y + max_lane_width)
+            grid_y_low_bound = min(np.negative(max_lane_width), lanes_vertical_bin_mean_y - max_lane_width * 1.15)
+            grid_y_up_bound = max(max_lane_width, lanes_vertical_bin_mean_y + max_lane_width * 1.15)
                 
             grid_dict[(lanes_vertical_bin_mean_y, x_current)] = [grid_x_up_bound, grid_x_low_bound, grid_y_up_bound, grid_y_low_bound]
             

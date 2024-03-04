@@ -26,6 +26,18 @@ class ParallelPolynomialRegression:
         cls.X_left_length = X_left_length
         cls.X_right_length = X_right_length
         cls.lane_min_samples = lane_min_samples
+    
+    def determine_scaler(self, X):
+        if len(X) > 3000:
+            return 0.05
+        elif len(X) > 2000:
+            return 0.1
+        elif len(X) > 1000:
+            return 0.15
+        elif len(X) > 700:
+            return 0.2
+        else:
+            return 0.25
         
     def fit(self, X, y):
         X_left = X[:ParallelPolynomialRegression.X_left_length]
@@ -42,9 +54,15 @@ class ParallelPolynomialRegression:
         max_iterations = 100
         lucky_number = 7
         prev_error = float('inf')
-        # Initialize coefficients to a default value if fitting cannot be performed
         left_lane_coeffs = np.zeros(self.degree + 1)
         right_lane_coeffs = np.zeros(self.degree + 1)
+        
+        # define scaler from 0.05, 0.1, 0.15, 0.2, to 0.25 depending on the length of the data from above 3000, 2000, 1000, 700, 500 from the left lane
+        # define scaler for left lane
+        left_scaler = self.determine_scaler(X_left)
+
+        # define scaler for right lane
+        right_scaler = self.determine_scaler(X_right)
         
         poly_regression = PolynomialRegression(self.degree)
 
@@ -52,7 +70,7 @@ class ParallelPolynomialRegression:
             
             if len(X_left) >=  ParallelPolynomialRegression.lane_min_samples:
                 # Use random sampling for data points in each grid cell
-                idx = np.random.randint(len(X_left), size= int(max((0.25 * len(X_left)), ParallelPolynomialRegression.lane_min_samples)))
+                idx = np.random.randint(len(X_left), size= int(max((left_scaler * len(X_left)), ParallelPolynomialRegression.lane_min_samples)))
                 X_left_rd = X_left[idx]
                 y_left_rd = y_left[idx]
                 # Fit the left lane
@@ -67,7 +85,7 @@ class ParallelPolynomialRegression:
             
             if len(X_right) >=  ParallelPolynomialRegression.lane_min_samples:
                 # Use random sampling for data points in each grid cell
-                idx = np.random.randint(len(X_right), size= int(max((0.3 * len(X_right)), ParallelPolynomialRegression.lane_min_samples)))
+                idx = np.random.randint(len(X_right), size= int(max((right_scaler * len(X_right)), ParallelPolynomialRegression.lane_min_samples)))
                 X_right_rd = X_right[idx]
                 y_right_rd = y_right[idx]
                 # Fit the right lane
@@ -83,7 +101,8 @@ class ParallelPolynomialRegression:
                 if max_x < X_right_rd.max():
                     max_x = X_right_rd.max()
             
-            current_error = poly_regression.cost(left_lane_coeffs, right_lane_coeffs, np.linspace(min_x, max_x, 1000), parallelism_weight=100)
+            current_error = model_left.estimator_.score(X_left_rd, y_left_rd) + model_right.estimator_.score(X_right_rd, y_right_rd)
+            current_error = current_error + poly_regression.cost(left_lane_coeffs, right_lane_coeffs, np.linspace(min_x, max_x, 100))
             # Update best model based on error
             if current_error < prev_error:
                 prev_error = current_error
@@ -190,3 +209,6 @@ class ParallelPolynomialRegression:
         total_cost = cost_intervals + parallelism_weight * parallelism_penalty
         
         return total_cost
+    
+
+

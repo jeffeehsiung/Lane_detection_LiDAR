@@ -189,8 +189,8 @@ if __name__ == "__main__":
             data_repres_left = data_repres_left[data_repres_left[:, 0].argsort()]
             data_repres_right = data_repres_right[data_repres_right[:, 0].argsort()]
             print(f"Left lane data: {len(data_repres_left)}, Right lane data: {len(data_repres_right)}")
+
             # Ensure enough points for fitting
-            # if len(data_repres_left) >= poly_degree + 1 and len(data_repres_right) >= poly_degree + 1:
             if (len(data_repres_left) >= max(lucky_number, min_samples)) and (len(data_repres_right) >= max(lucky_number, min_samples)):
                 X_left = data_repres_left[:, 0].reshape(-1, 1)
                 y_left = data_repres_left[:, 1]
@@ -207,7 +207,7 @@ if __name__ == "__main__":
                 
             model_mix = RANSACRegressor(ParallelPolynomialRegression(degree=poly_degree,left_coeffs=left_lane_coeffs, right_coeffs=right_lane_coeffs, random_state=0),
                                             min_samples=((len(data_repres_left) + len(data_repres_right))),
-                                            max_trials=10,
+                                            max_trials=20,
                                             random_state=0)
             model_mix.fit(X_total, y_total)
                 
@@ -245,7 +245,7 @@ if __name__ == "__main__":
         best_coeffs_pair = best_coeffs_pair.reshape(-1, 4)
         print(f"Best coefficients: {best_coeffs_pair}")
         # Ensure the output directory exists
-        output_dir = 'sample_output_final'
+        output_dir = 'sample_output_parallel_high_width'
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         # Save the coefficients to a text file
