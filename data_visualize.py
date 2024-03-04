@@ -162,6 +162,6 @@ class Vis():
 
 if __name__ == "__main__":
   data_folder = "./pointclouds"
-  lane_folder = "./sample_output_final"
+  lane_folder = "./sample_output_parallel_high_width"
   vis = Vis(data_folder, lane_folder)
   vis.visualize()

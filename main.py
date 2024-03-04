@@ -83,7 +83,7 @@ if __name__ == "__main__":
         best_labels = lane_detection_system.cluster_with_dbscan(pcd, eps, min_samples)
         updated_attributes = np.hstack((attributes, best_labels.reshape(-1, 1)))  # Append labels as a new column
         # Learn intensity threshold from clusters    
-        intensity_threshold = lane_detection_system.learn_intensity_threshold(updated_attributes, top_percentage=0.5)
+        intensity_threshold = lane_detection_system.learn_intensity_threshold(updated_attributes, top_percentage=0.35)
         
         # Filter clusters based on intensity and geometric shape
         selected_indices = lane_detection_system.intensity_filter(updated_attributes, intensity_threshold)
