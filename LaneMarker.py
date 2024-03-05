@@ -30,7 +30,11 @@ class LaneMarker:
         attributes = attributes[sorted_indices]
         
         # Calculate the range of x-coordinates
-        min_x, max_x = points[:, 0].min(), points[:, 0].max()
+        mean_x = np.mean(points[:, 0])
+        std_x = np.std(points[:, 0])
+        min_x = max(mean_x - 3 * std_x, points[:, 0].min())
+        max_x = min(mean_x + 3 * std_x, points[:, 0].max())
+        
         step = 1
         line_of_sight = 10  # The distance ahead of the vehicle to consider for the grid bounds
         
@@ -40,7 +44,7 @@ class LaneMarker:
         mean_intercept = np.mean([intercept for _, (_, intercept) in slopes_dict.items()])
         std_intercept = np.std([intercept for _, (_, intercept) in slopes_dict.items()])
         # remove slopes that are outside of the probability distribution and are greater than 35 degrees: tan(35) = 0.7
-        z_score_threshold = 1.645 # 80% of the probability distribution
+        z_score_threshold = 1.5 # 80% of the probability distribution
         slopes_dict_copy = slopes_dict.copy()
         
         slopes_dict = {segment: (slope, intercept) for segment, (slope, intercept) in slopes_dict.items() if mean_slope - z_score_threshold * std_slope < slope < mean_slope + z_score_threshold * std_slope and abs(slope) < 0.7}
@@ -62,6 +66,8 @@ class LaneMarker:
         # Start defining grids
         x_current = min_x
         previous_slope, previous_intercept = 0, 0
+        previous_lanes_vertical_bin_mean_y = 0
+        
         while x_current < max_x:
             applicable_segments = [(start_end, s_i) for start_end, s_i in segment_dict.items() if start_end[0] <= x_current <= start_end[1]]        
             if np.negative(line_of_sight) <= x_current <= line_of_sight:
@@ -74,8 +80,8 @@ class LaneMarker:
                     segment_slope = (previous_slope + next_segment[1][0]) / 2
                     segment_intercept = (previous_intercept + next_segment[1][1]) / 2
                 except ValueError:  # No next segment. Use the average of previous and mean slope and intercept
-                    segment_slope = (previous_slope + mean_slope) / 2
-                    segment_intercept = (previous_intercept + mean_intercept) / 2
+                    segment_slope = (previous_slope)
+                    segment_intercept = (previous_intercept)
             
             elif len(applicable_segments) > 1:  # Multiple segments match
                 # Choose segment with slope closest to previous segment's slope
@@ -87,37 +93,47 @@ class LaneMarker:
             previous_slope, previous_intercept = segment_slope, segment_intercept
             
             # Define grid bounds with slope consideration
-            lanes_vertical_bin_mean_y = segment_slope * (x_current) + (segment_intercept/num_lanes)
+            lanes_vertical_bin_mean_y = segment_slope * (x_current) + (segment_intercept)
             # mediate with the center of the lane
-            lanes_vertical_bin_mean_y = (lanes_vertical_bin_mean_y) / 2
+            lanes_vertical_bin_mean_y = (lanes_vertical_bin_mean_y) / (num_lanes/2)
+            
+            # Check deviation from the previous value
+            max_deviation = max_lane_width
+            if abs(lanes_vertical_bin_mean_y - previous_lanes_vertical_bin_mean_y) > max_deviation:
+                # avoid sudden jumps in the lane center position by taking the average of the previous and current value
+                lanes_vertical_bin_mean_y = (lanes_vertical_bin_mean_y + previous_lanes_vertical_bin_mean_y) / 2
+
             
             grid_x_low_bound = x_current - line_of_sight
             grid_x_up_bound = x_current + line_of_sight
-            grid_y_low_bound = min(np.negative(max_lane_width), lanes_vertical_bin_mean_y - max_lane_width * 1.15)
-            grid_y_up_bound = max(max_lane_width, lanes_vertical_bin_mean_y + max_lane_width * 1.15)
+            grid_y_low_bound = min(np.negative(max_lane_width), lanes_vertical_bin_mean_y - max_lane_width * 1.1)
+            grid_y_up_bound = max(max_lane_width, lanes_vertical_bin_mean_y + max_lane_width * 1.1)
                 
             grid_dict[(lanes_vertical_bin_mean_y, x_current)] = [grid_x_up_bound, grid_x_low_bound, grid_y_up_bound, grid_y_low_bound]
             
             x_current += step
+            previous_lanes_vertical_bin_mean_y = lanes_vertical_bin_mean_y
         
         # plot the points and on top of that plot the grid bounds and mark the lanes_vertical_bin_mean_y and x for each grid
-        if visualize:
-            fig, ax = plt.subplots()
-            ax.scatter(points[:, 0], points[:, 1], c='b', label='Point Cloud')
-            for grid_coord, grid_bounds in grid_dict.items():
-                x_up, x_low, y_up, y_low = grid_bounds
-                ax.plot([x_low, x_up], [y_up, y_up], c='r')
-                ax.plot([x_up, x_up], [y_up, y_low], c='r')
-                ax.plot([x_up, x_low], [y_low, y_low], c='r')
-                ax.plot([x_low, x_low], [y_low, y_up], c='r')
-                lanes_vertical_bin_mean_y, x = grid_coord
-                ax.scatter(x, lanes_vertical_bin_mean_y, c='g')
-                ax.text(x, lanes_vertical_bin_mean_y, f'{x:.2f}, {lanes_vertical_bin_mean_y:.2f}', fontsize=8)
+        fig, ax = plt.subplots()
+        ax.scatter(points[:, 0], points[:, 1], c='b', label='Point Cloud')
+        for grid_coord, grid_bounds in grid_dict.items():
+            x_up, x_low, y_up, y_low = grid_bounds
+            ax.plot([x_low, x_up], [y_up, y_up], c='r')
+            ax.plot([x_up, x_up], [y_up, y_low], c='r')
+            ax.plot([x_up, x_low], [y_low, y_low], c='r')
+            ax.plot([x_low, x_low], [y_low, y_up], c='r')
+            lanes_vertical_bin_mean_y, x = grid_coord
+            ax.scatter(x, lanes_vertical_bin_mean_y, c='g')
+            ax.text(x, lanes_vertical_bin_mean_y, f'{x:.1f}, {lanes_vertical_bin_mean_y:.1f}', fontsize=3)
             ax.set_xlabel('X')
             ax.set_ylabel('Y')
             ax.set_title('Grid Bounds')
+        if visualize:
             plt.show()
-        
+        else:
+            # save the plot with a unique name if there already exists a file with the same name
+            plt.savefig(f'./grid_bounds_{len(grid_dict)}.png')
         return grid_dict
 
 

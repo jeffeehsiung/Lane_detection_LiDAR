@@ -83,7 +83,7 @@ if __name__ == "__main__":
         best_labels = lane_detection_system.cluster_with_dbscan(pcd, eps, min_samples)
         updated_attributes = np.hstack((attributes, best_labels.reshape(-1, 1)))  # Append labels as a new column
         # Learn intensity threshold from clusters    
-        intensity_threshold = lane_detection_system.learn_intensity_threshold(updated_attributes, top_percentage=0.35)
+        intensity_threshold = lane_detection_system.learn_intensity_threshold(updated_attributes, top_percentage=0.5)
         
         # Filter clusters based on intensity and geometric shape
         selected_indices = lane_detection_system.intensity_filter(updated_attributes, intensity_threshold)
@@ -145,7 +145,8 @@ if __name__ == "__main__":
         poly_regression = PolynomialRegression(degree=poly_degree) 
         
         iteration = 0
-        max_iter = 10
+        max_iter = 15
+        best_iteration = 0
         lucky_number = 7
         prev_error = float('inf')
         best_coeffs_pair_left = None
@@ -207,7 +208,7 @@ if __name__ == "__main__":
                 
             model_mix = RANSACRegressor(ParallelPolynomialRegression(degree=poly_degree,left_coeffs=left_lane_coeffs, right_coeffs=right_lane_coeffs, random_state=0),
                                             min_samples=((len(data_repres_left) + len(data_repres_right))),
-                                            max_trials=20,
+                                            max_trials=30,
                                             random_state=0)
             model_mix.fit(X_total, y_total)
                 
@@ -215,37 +216,23 @@ if __name__ == "__main__":
             right_lane_coeffs = model_mix.estimator_.get_params(deep=True)["right_coeffs"]
                 
             current_error = model_mix.estimator_.score(X_total, y_total)
-            # Polynomial Fitting with RANSAC
-            # model_left = RANSACRegressor(poly_regression, 
-            #                              min_samples = int(min(7, min_samples*0.65)), 
-            #                              max_trials = 10000, 
-            #                              random_state=0)
-            # model_left.fit(X_left, y_left)
-            # left_lane_coeffs = model_left.estimator_.get_params()["coeffs"]
-
-            # model_right = RANSACRegressor(poly_regression,
-            #                               min_samples = int(min(7, min_samples*0.65)),
-            #                               max_trials = 10000,
-            #                               random_state=0)
-            # model_right.fit(X_right, y_right)
-            # right_lane_coeffs = model_right.estimator_.get_params()["coeffs"] # corresponds to coefficients for order from highest to lowest
-            # current_error = poly_regression.cost(left_lane_coeffs, right_lane_coeffs, np.linspace(min_x, max_x, 1000), parallelism_weight=100)
-            print(f"Iteration: {iteration}, Error: {current_error}")
+            
             # Update best model based on error
             if current_error < prev_error:
+                best_iteration = iteration
                 prev_error = current_error
                 best_coeffs_pair_left = left_lane_coeffs
                 best_coeffs_pair_right = right_lane_coeffs
                 
             iteration += 1
         
-        print(f"Iteration: {iteration}, Error: {prev_error}")
+        print(f"best iteration: {best_iteration}, Error: {prev_error}")
         best_coeffs_pair = np.concatenate((best_coeffs_pair_left, best_coeffs_pair_right))
         # Convert the best_coeffs_pair to a 2D array with 4 columns
         best_coeffs_pair = best_coeffs_pair.reshape(-1, 4)
         print(f"Best coefficients: {best_coeffs_pair}")
         # Ensure the output directory exists
-        output_dir = 'sample_output_parallel_high_width'
+        output_dir = 'sample_output_parallel_threshold'
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         # Save the coefficients to a text file

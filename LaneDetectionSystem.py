@@ -175,8 +175,7 @@ class LaneDetectionSystem:
         silhouette_score_buffer = []
         # distortions = []
         
-        if visualize:
-            df = pd.DataFrame(xy_T, columns=['x', 'y'])
+        df = pd.DataFrame(xy_T, columns=['x', 'y'])
 
         min_n_cluster = min_n_cluster
         for k in range(min_n_cluster, max_n_clusters):
@@ -190,8 +189,7 @@ class LaneDetectionSystem:
             # labels = db.labels_
             
             # new columns for each kmeans cluster label in cluster_labels
-            if visualize:
-                df[f'KMeans_{k}'] = cluster_labels
+            df[f'KMeans_{k}'] = cluster_labels
                 
             # calculate the silhouette score
             silhouette_avg = silhouette_score(xy_T, cluster_labels)
@@ -202,14 +200,17 @@ class LaneDetectionSystem:
             # elbow method to find the optimal number of clusters
             # distortions.append(kmeans.inertia_)
             
+        fig, axs = plt.subplots(1, len(df.columns)-2, figsize=(40, 5))
+        for i, ax in enumerate(fig.axes, start=2):
+            ax.scatter(df['x'], df['y'], c=df.iloc[:, i], cmap='viridis')
+            # set titile same as the column name
+            ax.set_title(df.columns[i])
         if visualize: 
             # plot the clusters
-            fig, axs = plt.subplots(1, len(df.columns)-2, figsize=(40, 5))
-            for i, ax in enumerate(fig.axes, start=2):
-                ax.scatter(df['x'], df['y'], c=df.iloc[:, i], cmap='viridis')
-                # set titile same as the column name
-                ax.set_title(df.columns[i])
             plt.show()
+        else:
+            # save the subplot with a unique name if there already exists a file with the same name
+            plt.savefig(f'./kmeans_clusters_{len(df.columns)-2}.png')
         
         # # Use the 'kneed' library to identify the elbow point automatically
         # kn = KneeLocator(range(min_n_cluster, max_n_clusters), distortions, curve='convex', direction='decreasing')
@@ -317,7 +318,7 @@ class LaneDetectionSystem:
         slope_mean = np.mean(list(slopes.values()))
         slope_std = np.std(list(slopes.values()))
         # remove the slope that is outside of 90% of the probability distribution and the slope where its relative yaw angle is greater than 45 degress: tan(45) = 1
-        slopes = {label: slope for label, slope in slopes.items() if abs(slope - slope_mean) < 1.645 * slope_std and abs(slope) < 1}
+        slopes = {label: slope for label, slope in slopes.items() if abs(slope - slope_mean) < 1.63 * slope_std and abs(slope) < 1}
         
         print(f"mean slope: {slope_mean}, std slope: {slope_std}, delta number of slopes: {len(slopes_dict) - len(slopes)}")
         

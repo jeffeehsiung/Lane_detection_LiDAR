@@ -18,20 +18,64 @@ class PolynomialRegression:
         self.costs = costs
 
     def fit(self, X, y):
+        """
+        Fit the polynomial regression model to the data.
+        
+        Args:
+        - X (array): The input data.
+        - y (array): The output data.
+        """
         self.coeffs = np.polyfit(X.ravel(), y, self.degree)
 
     def get_params(self, deep=False):
+        """_summary_
+
+        Args:
+            deep (bool, optional): Defaults to False.
+
+        Returns:
+            dict: the coefficients for the polynomial.
+        """
         return {'coeffs': self.coeffs}
 
     def set_params(self, coeffs=None, random_state=None):
+        """
+        Set the parameters for the model.
+
+        Args:
+            coeffs (array): The coefficients for the polynomial.
+            random_state (int): The random state for the model.
+        """
         self.coeffs = coeffs
 
     def predict(self, X):
+        """
+        Predict the y-values for the given x-values.
+        Args:
+            X (array): The input data.
+
+        Returns:
+            array: The predicted y-values.
+        """
         poly_eqn = np.poly1d(self.coeffs)
         y_hat = poly_eqn(X.ravel())
         return y_hat
 
     def score(self, X, y):
+        """
+        Calculate the mean squared error for the model.
+
+        Args:
+            X (_type_): _description_
+            y (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        if X.size == 0:
+            # Handle the case where there's not enough data to score
+            # This could involve returning a default high cost or another appropriate value
+            return float('inf')  # or some other appropriate action
         return mean_squared_error(y, self.predict(X))
     
     def cost(self, left_lane_coeffs, right_lane_coeffs, x_range, parallelism_weight=100):
@@ -66,17 +110,12 @@ class PolynomialRegression:
 
         # Initialize measured intervals and slope differences
         interval_measured = []
-        slope_differences = []
 
         # Calculate perpendicular distances for each x in x_range
-        for x, y, dy_right, dy_left in zip(x_range, y_right, y_deriv_right, y_deriv_left):
+        for x, y in zip(x_range, y_right):
             # calculate the shortest distance(orthogonal distance) between the two lines
             dist = np.abs(poly_left(x) - poly_right(x)) / np.sqrt(1 + poly_left_deriv(x)**2)
             interval_measured.append(dist)
-            
-            # Calculate the slope difference
-            slope_difference = np.abs(dy_right - dy_left)
-            slope_differences.append(slope_difference)
 
         # True interval is assumed to be in between 3 to 3.75 meters, or 3
         interval_truth = np.full_like(x_range, (3+3.75)/2)
@@ -84,7 +123,7 @@ class PolynomialRegression:
         cost_intervals = mean_squared_error(interval_truth, interval_measured)
 
         # Calculate the mean of slope differences as the parallelism penalty
-        parallelism_penalty = np.mean(slope_differences)
+        parallelism_penalty = mean_squared_error(y_deriv_left, y_deriv_right)
     
         # Total cost combines interval cost and parallelism penalty
         total_cost = cost_intervals + parallelism_weight * parallelism_penalty
