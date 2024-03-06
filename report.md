@@ -1,6 +1,6 @@
 # Ego-Lane Detection Using LiDAR Pointclouds
 
-## Authors
+## Author
 Chieh Fei (Jeffee) Hsiung, KU Leuven
 
 ## Abstract
