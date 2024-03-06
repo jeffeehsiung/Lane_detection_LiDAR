@@ -22,7 +22,8 @@ The statistical assumptions are as follows:
 <p align="center">
     <img src="https://globaldesigningcities.org/wp-content/uploads/2016/11/06_V2-61copy-1000x620.jpg" width="500" height="300">
 </p>
-<p style="text-align: center;">Figure 1: Lane Width Research [1]</p>
+<p style="text-align: center;"><strong>Figure 1</strong>: Lane Width Research [1]</p>
+
 - The lane markings are more reflective than the road surface that the intensity of the lane markings is higher than the road surface. This assumptions enable filtering based on intensity values.
 
 - **Loading Pointclouds with Attributes**: Utilizing Open3D, pointclouds are loaded from binary files, encapsulating spatial information (x, y, z coordinates) and non-spatial attributes (intensity and lidar beam id) crucial for ego lane detection. This initial step ensures a comprehensive dataset is prepared, including assigning a unique scene identifier to each pointcloud for efficient processing and analysis.
@@ -44,9 +45,9 @@ Lane detection is a critical phase where the preprocessed data is analyzed to id
 - **Optimization of K-Means Clustering**: Post-initial clustering and filtering, K-Means clustering is optimized to segment the lane points into distinct lane segments along the x-axis. The implementation enables a piecewise approximation of the lane curvature that scatters with similar slopes are labeled as a group. Through silhouette analysis, the algorithm determines the optimal number of clusters (lane segments along the x-axis).
 
 <p align="center">
-    <img src="images/kmeans_clusters_3.png" width="1000" height="300">
+    <img src="images/kmeans_clusters_10.png" width="1000" height="300">
 </p>
-<p style="text-align: center;">Figure 2: K-Means Clustering for Lane-Slope Grouping</p>
+<p style="text-align: center;"><strong>Figure 2</strong>: K-Means Clustering for Lane-Slope Grouping</p>
 
 - **Slope Calculation and Orthogonal Slope Filtering**: For each identified lane segment cluster (along the x-axis), the algorithm calculates the slope, aiding in the discrimination of lane directions and orientations. Clusters with slopes nearly orthogonal to the expected lane direction are filtered out, focusing the analysis on plausible lane orientations.
 
@@ -83,7 +84,7 @@ The algorithm was tested on all datasets provided by Seoul Robotics. The preproc
 <p align="center">
     <img src="images/ego_lane_detection.png" width="500" height="200">
 </p>
-<p style="text-align: center;">Figure 4: SampleID: 1553565729015329642 Fitting Result</p>
+<p style="text-align: center;"><strong>Figure 4</strong>: SampleID: 1553565729015329642 Fitting Result</p>
 
 Given visual inspection, the algorithm's performance is
 - Optimal when the lane marking scatters are at proximity to each other. 
