@@ -22,7 +22,7 @@ The statistical assumptions are as follows:
 <p align="center">
     <img src="https://globaldesigningcities.org/wp-content/uploads/2016/11/06_V2-61copy-1000x620.jpg" width="500" height="300">
 </p>
-<p style="text-align: center;"><strong>Figure 1</strong>: Lane Width Research [1]</p>
+<p style="text-align: center;"><strong>Figure 1</strong>: Lane Width Research [2]</p>
 
 - The lane markings are more reflective than the road surface that the intensity of the lane markings is higher than the road surface. This assumptions enable filtering based on intensity values.
 
@@ -79,7 +79,7 @@ The lane detection algorithm employs `RANSACRegressor` with a custom estimator, 
 - **Cost Function for Lane Fidelity**: Additional aspect of the my approach is the cost function defined within the Polynomial Regression class. This function, `cost`, not only considers the mean squared error between the modeled and actual lane widths across a range of x-values but also includes a penalty term for deviations from parallelism between the left and right lane boundaries. The aim is to ensure that the detected lanes are not only accurate in terms of position but also consistent in width and parallel to each other.
 
 ## 3. Results
-The algorithm was tested on all datasets provided by Seoul Robotics. The preprocessing and lane detection methods demonstrated high effectiveness in isolating and accurately modeling lane lines. Comparative analysis with ground truth data showed that the dynamically created grid allows the polynomial to align closely with the actual lanes, indicating the algorithm's reliability.
+The algorithm was tested on all datasets provided by Seoul Robotics[1]. The preprocessing and lane detection methods demonstrated high effectiveness in isolating and accurately modeling lane lines. Comparative analysis with ground truth data showed that the dynamically created grid allows the polynomial to align closely with the actual lanes, indicating the algorithm's reliability.
 
 <p align="center">
     <img src="images/ego_lane_detection.png" width="500" height="200">
@@ -97,7 +97,7 @@ Given visual inspection, the algorithm's performance is
 - The other ill-fitted lane is due to the multiple orientations of lanes are present in the scene, which leads to incorrect lane curve fitting.
 
 ## 4. Discussion
-The integration of the methods including the inliner and outliner RANSACRegression Class, Polynomial Regression Class, Range-of-Interest Grids Creation in LaneMarking class, and finally the Slope-Calculation in LaneDetection class play a significant role in modeling of lane boundaries from LiDAR pointcloud data. By combining traditional polynomial fitting techniques with a custom cost function that emphasizes lane fidelity and parallelism, the current implementations gives a fair ego lane detection result. However, future work may explore the application of HDMap for curved road ego lane fitting, as well as other advance algorithms that are able to address complex road geometries, including intersections and multi-lane roads.
+The integration of the methods including the inliner and outliner RANSACRegression Class, Polynomial Regression Class, Range-of-Interest Grids Creation in LaneMarking class, and finally the Slope-Calculation in LaneDetection class play a significant role in modeling of lane boundaries from LiDAR pointcloud data. By combining traditional polynomial fitting techniques with a custom cost function that emphasizes lane fidelity and parallelism, the current implementations gives a fair ego lane detection result. However, future work may explore the application of HDMap[3] for curved road ego lane fitting, as well as other advance algorithms that are able to address complex road geometries, including intersections and multi-lane roads.
 
 ## 5. Conclusion
 This report introduced a systematic approach to ego lane detection from LiDAR pointclouds, highlighting the importance of data preprocessing and advanced polynomial fitting. The methodology and results underscore the algorithm's applicability to autonomous vehicle navigation, offering a foundation for further research and development in this area.
@@ -105,3 +105,4 @@ This report introduced a systematic approach to ego lane detection from LiDAR po
 ## References
 - [1] Seoul Robotics. (2021). 3D Point Cloud Data for Lane Detection. Seoul Robotics. https://www.seoulrobotics.org/
 - [2] Global Designing Cities Initiative. (2016). Urban Street Design Guide. https://globaldesigningcities.org/publication/urban-street-design-guide/
+- [3] HDMap. (2021). HDMap for Autonomous Vehicles. https://github.com/Tsinghua-MARS-Lab/HDMapNet
