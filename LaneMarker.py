@@ -32,8 +32,8 @@ class LaneMarker:
         # Calculate the range of x-coordinates
         mean_x = np.mean(points[:, 0])
         std_x = np.std(points[:, 0])
-        min_x = max(mean_x - 3 * std_x, points[:, 0].min())
-        max_x = min(mean_x + 3 * std_x, points[:, 0].max())
+        min_x = points[:, 0].min()
+        max_x = points[:, 0].max()
         
         step = 1
         line_of_sight = 10  # The distance ahead of the vehicle to consider for the grid bounds
@@ -52,7 +52,6 @@ class LaneMarker:
         # # further remove segments in the slopes dictionary where intercept is outside of 80% of the probability distribution
         slopes_dict = {segment: (slope, intercept) for segment, (slope, intercept) in slopes_dict.items() if mean_intercept - z_score_threshold * std_intercept < intercept < mean_intercept + z_score_threshold * std_intercept}
         print(f"Removed intercepts: {[(segment, (slope, intercept)) for segment, (slope, intercept) in slopes_dict_copy.items() if mean_intercept - z_score_threshold * std_intercept > intercept or intercept > mean_intercept + z_score_threshold * std_intercept]}")
-    
         # Define segments with their slopes and intercepts
         for label in np.unique(attributes[:, -1]):
             if label in slopes_dict:
@@ -66,7 +65,7 @@ class LaneMarker:
         # Start defining grids
         x_current = min_x
         previous_slope, previous_intercept = 0, 0
-        previous_lanes_vertical_bin_mean_y = 0
+        previous_lanes_vertical_bin_mean_y = (mean_slope * (x_current) + (mean_intercept))
         
         while x_current < max_x:
             applicable_segments = [(start_end, s_i) for start_end, s_i in segment_dict.items() if start_end[0] <= x_current <= start_end[1]]        
@@ -98,10 +97,13 @@ class LaneMarker:
             lanes_vertical_bin_mean_y = (lanes_vertical_bin_mean_y) / (num_lanes/2)
             
             # Check deviation from the previous value
-            max_deviation = max_lane_width
-            if abs(lanes_vertical_bin_mean_y - previous_lanes_vertical_bin_mean_y) > max_deviation:
+            max_deviation = max_lane_width *0.55
+            if abs(lanes_vertical_bin_mean_y - previous_lanes_vertical_bin_mean_y) >= max_deviation:
+                delta = abs(lanes_vertical_bin_mean_y - previous_lanes_vertical_bin_mean_y) # difference between the previous center point and next center point of the lane
+                # if delta > max_deviation, depending on the ratio of delta divided by maximum lane width, or N, indicating then the lane center has jumped N lane width, round up by taking the ceiling of the ratio
+                N = int(np.ceil(delta / max_deviation))
                 # avoid sudden jumps in the lane center position by taking the average of the previous and current value
-                lanes_vertical_bin_mean_y = (lanes_vertical_bin_mean_y + previous_lanes_vertical_bin_mean_y) / 2
+                lanes_vertical_bin_mean_y = (lanes_vertical_bin_mean_y + previous_lanes_vertical_bin_mean_y) / (2*N)
 
             
             grid_x_low_bound = x_current - line_of_sight

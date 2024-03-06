@@ -318,7 +318,7 @@ class LaneDetectionSystem:
         slope_mean = np.mean(list(slopes.values()))
         slope_std = np.std(list(slopes.values()))
         # remove the slope that is outside of 90% of the probability distribution and the slope where its relative yaw angle is greater than 45 degress: tan(45) = 1
-        slopes = {label: slope for label, slope in slopes.items() if abs(slope - slope_mean) < 1.63 * slope_std and abs(slope) < 1}
+        slopes = {label: slope for label, slope in slopes.items() if abs(slope - slope_mean) < 1.625 * slope_std and abs(slope) < 1}
         
         print(f"mean slope: {slope_mean}, std slope: {slope_std}, delta number of slopes: {len(slopes_dict) - len(slopes)}")
         

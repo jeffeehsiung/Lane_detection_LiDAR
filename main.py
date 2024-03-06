@@ -215,7 +215,9 @@ if __name__ == "__main__":
             left_lane_coeffs = model_mix.estimator_.get_params(deep=True)["left_coeffs"]
             right_lane_coeffs = model_mix.estimator_.get_params(deep=True)["right_coeffs"]
                 
-            current_error = model_mix.estimator_.score(X_total, y_total)
+            # current_error = model_mix.estimator_.score(X_total, y_total)
+            x_range = np.linspace(X_total.min(), X_total.max(), 200)
+            current_error = model_mix.estimator_.cost(x_range = x_range)
             
             # Update best model based on error
             if current_error < prev_error:

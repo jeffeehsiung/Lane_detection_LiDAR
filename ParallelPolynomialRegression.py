@@ -183,10 +183,10 @@ class ParallelPolynomialRegression:
             mse = mean_squared_error(y, self.predict(X))
             
         x_range = np.linspace(X_left.min(), X_left.max(), 100)
-        # custom_cost = self.cost(x_range = x_range, parallelism_weight=100)
+        custom_cost = self.cost(x_range = x_range, parallelism_weight=100)
         
-        # total_cost = mse + custom_cost
-        total_cost = mse
+        total_cost = mse + custom_cost
+        # total_cost = mse
         
         return total_cost
     
