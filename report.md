@@ -18,7 +18,10 @@ The implemented algorithm employs a series of statistically based approach to fi
 The statistical assumptions are as follows:
 - The road elements other than lane markings and ground are significantly above the road surface. This assumptions enable filtering based on z-coordinates.
 - The width-between-lanes based on research ranges from 3m to maximum 4m, where as the lane markings is 0.1m to 0.15m. The observation indicates most scatters will be from the ground and should be disregarded. This assumptions enables filtering based on scatter euclidean distance and forming sub-surfaces of the ground plane.
-<img src="https://globaldesigningcities.org/wp-content/uploads/2016/11/06_V2-61copy-1000x620.jpg" width="500" height="300">
+
+<p align="center">
+    <img src="https://globaldesigningcities.org/wp-content/uploads/2016/11/06_V2-61copy-1000x620.jpg" width="500" height="300">
+</p>
 <p style="text-align: center;">Figure 1: Lane Width Research [1]</p>
 - The lane markings are more reflective than the road surface that the intensity of the lane markings is higher than the road surface. This assumptions enable filtering based on intensity values.
 
@@ -40,7 +43,9 @@ Lane detection is a critical phase where the preprocessed data is analyzed to id
 
 - **Optimization of K-Means Clustering**: Post-initial clustering and filtering, K-Means clustering is optimized to segment the lane points into distinct lane segments along the x-axis. The implementation enables a piecewise approximation of the lane curvature that scatters with similar slopes are labeled as a group. Through silhouette analysis, the algorithm determines the optimal number of clusters (lane segments along the x-axis).
 
-<img src="images/kmeans_clusters_10.png" width="1000" height="300">
+<p align="center">
+    <img src="images/kmeans_clusters_3.png" width="1000" height="300">
+</p>
 <p style="text-align: center;">Figure 2: K-Means Clustering for Lane-Slope Grouping</p>
 
 - **Slope Calculation and Orthogonal Slope Filtering**: For each identified lane segment cluster (along the x-axis), the algorithm calculates the slope, aiding in the discrimination of lane directions and orientations. Clusters with slopes nearly orthogonal to the expected lane direction are filtered out, focusing the analysis on plausible lane orientations.
@@ -52,7 +57,9 @@ Lane marking is a crucial step following lane detection, aimed at defining preci
 
 - **Grid Dictionary Creation**: The grid generating method within the LaneMarker class constructs a grid dictionary based on the x-coordinates range, considering each lane segment's slope and intercept calculated from previous stage. This dictionary maps grid coordinates to adjusted grid bounds, taking into account the maximum lane width and the number of lanes detected. This structured approach allows for the dynamic adaptation of lane marking to the road's geometry and the vehicle's perspective.
 
-<img src="images/grid_bounds_78.png" width="500" height="300">
+<p align="center">
+    <img src="images/grid_bounds_78.png" width="500" height="300">
+</p>
 <p style="text-align: center;">Figure 3: Corresponding Grid Creation Based on Segment Slopes</p>
 
 - **Visualization and Verification**: If enabled, the visualization feature plots the point cloud alongside the defined grid bounds, providing a visual confirmation of the lane marking process. This step is invaluable for debugging and verifying that the lane boundaries are accurately captured by the grid system.
@@ -73,7 +80,9 @@ The lane detection algorithm employs `RANSACRegressor` with a custom estimator, 
 ## 3. Results
 The algorithm was tested on all datasets provided by Seoul Robotics. The preprocessing and lane detection methods demonstrated high effectiveness in isolating and accurately modeling lane lines. Comparative analysis with ground truth data showed that the dynamically created grid allows the polynomial to align closely with the actual lanes, indicating the algorithm's reliability.
 
-<img src="images/random_result.png" width="500" height="200">
+<p align="center">
+    <img src="images/ego_lane_detection.png" width="500" height="200">
+</p>
 <p style="text-align: center;">Figure 4: SampleID: 1553565729015329642 Fitting Result</p>
 
 Given visual inspection, the algorithm's performance is
